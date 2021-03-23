@@ -20,9 +20,8 @@ import os
 
 import datasets
 
-import numpy as np
-import torch
-import torchaudio
+import soundfile as sf
+import librosa
 import warnings
 from audiomentations import (
     Compose,
@@ -724,17 +723,32 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
         augmentator = Compose([
             AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.0005, p=0.5),
             Gain(min_gain_in_db=-1, max_gain_in_db=1, p=0.5),
-            ClippingDistortion(min_percentile_threshold=0, max_percentile_threshold=5, p=0.5),
             FrequencyMask(min_frequency_band=0.0, max_frequency_band=0.5, p=0.5),
-            PolarityInversion(p=0.5),
             TimeMask(min_band_part=0.0, max_band_part=0.01, fade=True, p=0.5),
             TimeStretch(min_rate=0.7, max_rate=1.3, leave_length_unchanged=False, p=0.5),
             PitchShift(min_semitones=-3, max_semitones=3, p=0.5),
-            LoudnessNormalization(min_lufs_in_db=-31, max_lufs_in_db=-13, p=0.5)
+            # ClippingDistortion(min_percentile_threshold=0, max_percentile_threshold=5, p=0.5),
+            # LoudnessNormalization(min_lufs_in_db=-31, max_lufs_in_db=-13, p=0.5)
+            # PolarityInversion(p=0.5),
             # Shift(min_fraction=-0.01, max_fraction=0.01, rollover=False, p=0.5),
             # AddGaussianSNR(min_SNR=0.001, max_SNR=1.0, p=0.5),
             # Normalize(p=0.5),
         ])
+
+        def _convert_to_wav_and_save_it(path, speech_array=None, sample_rate=16000):
+            """We'll convert all the audio files to WAV format to speedup the loading (it will require about 10x more space in disk)"""
+            
+            if speech_array is None:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    speech_array, sample_rate = librosa.load(path, sr = sample_rate, res_type="zero_order_hold")
+
+            sample_path, sample_extension = os.path.splitext(path)
+            new_path = f"{sample_path}.wav"
+            
+            sf.write(new_path, speech_array, sample_rate, subtype="PCM_24")
+
+            return new_path
 
         with open(filepath, encoding="utf-8") as f:
             lines = f.readlines()
@@ -758,6 +772,9 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
 
                 sample = {key: value for key, value in zip(data_fields, field_values)}
 
+                new_path = _convert_to_wav_and_save_it(sample.get("path"))
+                sample["path"] = new_path
+
                 yield id_, sample
 
                 id_ += 1
@@ -767,17 +784,17 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                     for i in range(self.config.augmentation_factor):
                         
                         # loading audio file
-                        speech_array, sampling_rate = torchaudio.load(sample.get("path"))
+                        speech_array, sampling_rate = sf.read(sample.get("path"))
 
                         # augmenting data
                         speech_array_augmented = None
                         while(speech_array_augmented is None):
                             try:
                                 with warnings.catch_warnings():
-                                    warnings.simplefilter('ignore')
-                                    speech_array_augmented = torch.tensor(augmentator(samples=np.array(speech_array), sample_rate=sampling_rate))
+                                    warnings.simplefilter("ignore")
+                                    speech_array_augmented = augmentator(samples=speech_array, sample_rate=sampling_rate)
                             except Exception as e:
-                                # some transformations could randomly fail on some parameters combination
+                                # some transformations can randomly fail on some parameters combination
                                 # we'll try again if this happen
                                 pass
 
@@ -790,7 +807,9 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                         
                         # saving audio data to disk
                         os.makedirs(os.path.dirname(augmented_sample_path), exist_ok=True)
-                        torchaudio.save(augmented_sample_path, speech_array_augmented, sampling_rate, format="mp3")
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            sf.write(augmented_sample_path, speech_array_augmented, sampling_rate, subtype="PCM_24")
 
                         # updating augmented sample path
                         augmented_sample = sample.copy()

@@ -13,16 +13,16 @@ RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.d
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     python3 -m pip install --no-cache-dir \
-    datasets \
+    datasets==1.5.0 \
     jiwer==2.2.0 \
-    soundfile \
-    torchaudio \
+    soundfile==0.10.3.post1 \
     lang-trans==0.6.0 \
     librosa==0.8.0 \
+    samplerate==0.1.0 \
     scipy==1.5.4 \
     audiomentations==0.16.0 \
-    pyloudnorm \
-    wandb
+    pyloudnorm==0.1.0 \
+    wandb==0.10.23
 
 RUN pip3 uninstall -y typing allennlp
 

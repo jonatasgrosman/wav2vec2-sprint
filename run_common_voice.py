@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Union
 import datasets
 import numpy as np
 import torch
-import torchaudio
+import soundfile as sf
 from packaging import version
 from torch import nn
 
@@ -393,14 +393,12 @@ def main():
     if data_args.max_val_samples is not None:
         eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
 
-    resampler = torchaudio.transforms.Resample(48_000, 16_000)
-
     # Preprocessing the datasets.
-    # We need to read the aduio files as arrays and tokenize the targets.
+    # We need to read the audio files as arrays and tokenize the targets.
     def speech_file_to_array_fn(batch):
-        speech_array, sampling_rate = torchaudio.load(batch["path"])
-        batch["speech"] = resampler(speech_array).squeeze().numpy()
-        batch["sampling_rate"] = 16_000
+        speech_array, sampling_rate = sf.read(batch["path"])
+        batch["speech"] = speech_array
+        batch["sampling_rate"] = sampling_rate
         batch["target_text"] = batch["text"]
         return batch
 
