@@ -30,7 +30,7 @@ RUN pip3 install git+https://github.com/huggingface/transformers.git
 
 RUN mkdir -p /workspace/wav2vec/
 
-COPY finetune.sh run_common_voice.py  finetune_with_params.sh /workspace/wav2vec/
+COPY finetune.sh run_common_voice.py common_voice_ext.py finetune_with_params.sh /workspace/wav2vec/
 
 COPY home-server.html run_all.sh /usr/bin/
 
