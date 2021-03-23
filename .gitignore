@@ -127,3 +127,18 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# SO
+.DS_Store
+
+# IDE
+.vscode
+
+# ignorable folder/files pattern
+_ignore*
+
+# lock files
+*.lock
+
+# wandB files
+wandb
