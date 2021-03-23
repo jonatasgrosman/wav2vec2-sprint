@@ -19,8 +19,8 @@ parameters:
     value: /workspace/data
   overwrite_output_dir:
     value: True
-  #fp16:
-  #  value: True
+  fp16:
+    value: True
   max_steps:
     value: 10000
   save_steps:
