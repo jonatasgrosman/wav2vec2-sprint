@@ -1,0 +1,66 @@
+program: run_common_voice.py
+name: hf-wav2vec-sprint-fi
+method: bayes
+metric:
+  goal: minimize
+  name: eval/loss
+parameters:
+  seed:
+    value: 42
+  report_to: 
+    value: wandb
+  model_name_or_path:
+    value: facebook/wav2vec2-large-xlsr-53
+  dataset_config_name:
+    value: fi
+  output_dir:
+    value: /workspace/output_models/wav2vec2-large-xlsr-fi-demo
+  cache_dir:
+    value: /workspace/data
+  overwrite_output_dir:
+    value: True
+  #fp16:
+  #  value: True
+  max_steps:
+    value: 10000
+  save_steps:
+    value: 10000
+  eval_steps:
+    value: 100
+  logging_steps:
+    value: 100
+  save_total_limit:
+    value: 1
+  do_eval:
+    value: True
+  do_train:
+    value: True
+  per_device_train_batch_size:
+    value: 64
+  evaluation_strategy:
+    value: steps
+  learning_rate:
+    values: [7e-5, 1e-4, 3e-4, 6e-4, 1e-3]
+  warmup_steps:
+    values: [125, 250, 500, 1000, 2000]
+  augmentation_factor:
+    values: [0, 1, 2, 3]
+  group_by_length:
+    values: [True, False]
+  freeze_feature_extractor:
+    values: [True, False]
+  attention_dropout:
+    values: [0.025, 0.05, 0.1, 0.2, 0.4]
+  activation_dropout:
+    values: [0.025, 0.05, 0.1, 0.2, 0.4]
+  hidden_dropout:
+    values: [0.025, 0.05, 0.1, 0.2, 0.4]
+  feat_proj_dropout:
+    values: [0.025, 0.05, 0.1, 0.2, 0.4]
+  mask_time_prob:
+    values: [0.0125, 0.025, 0.05, 0.1, 0.2]
+  layerdrop:
+    values: [0.0, 0.025, 0.05, 0.1, 0.2]
+early_terminate:
+  type: hyperband
+  min_iter: 200
