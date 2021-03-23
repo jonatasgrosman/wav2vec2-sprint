@@ -134,7 +134,7 @@ class DataTrainingArguments:
         },
     )
     chars_to_ignore: List[str] = list_field(
-        default=[",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�"],
+        default=[",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�", "·", "჻", "¿", "¡", "~", "՞", "؟", "،", "।", "॥", ":-", "/-", "/="],
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
 
