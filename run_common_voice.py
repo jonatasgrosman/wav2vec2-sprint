@@ -13,6 +13,7 @@ import torch
 import soundfile as sf
 from packaging import version
 from torch import nn
+import homoglyphs as hg
 
 import transformers
 from transformers import (
@@ -137,11 +138,22 @@ class DataTrainingArguments:
         default=[",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�", "·", "჻", "¿", "¡", "~", "՞", "؟", "،", "।", "॥"],
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
-
     augmentation_factor: Optional[int] = field(
         default=0,
         metadata={
             "help": "How much augmented samples each training sample should generate, default is 0 (no augmentation)"
+        },
+    )
+    min_duration: Optional[float] = field(
+        default=0.0,
+        metadata={
+            "help": "The minimum duration (in seconds) that a sample needs to have to be considered for training"
+        },
+    )
+    max_duration: Optional[float] = field(
+        default=float("inf"),
+        metadata={
+            "help": "The maximum duration (in seconds) that a sample needs to have to be considered for training"
         },
     )
 
@@ -344,7 +356,7 @@ def main():
     eval_dataset = datasets.load_dataset("common_voice_ext.py", data_args.dataset_config_name, split="test", cache_dir=model_args.cache_dir)
 
     # Create and save tokenizer
-    chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]'
+    chars_to_ignore_regex = f'[{re.escape("".join(data_args.chars_to_ignore))}]'
 
     def remove_special_characters(batch):
         batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).lower() + " "
@@ -352,9 +364,19 @@ def main():
 
     train_dataset = train_dataset.map(remove_special_characters, remove_columns=["sentence"])
     eval_dataset = eval_dataset.map(remove_special_characters, remove_columns=["sentence"])
+    
+    unk_regex = None
+    if data_args.dataset_config_name in hg.Languages.get_all():
+        # creating regex to match language specific non valid characters
+        alphabet = hg.Languages.get_alphabet([data_args.dataset_config_name])
+        unk_regex = "[^" + re.escape("".join(alphabet)) + "\s\d]"
 
     def extract_all_chars(batch):
         all_text = " ".join(batch["text"])
+
+        if unk_regex is not None:
+            all_text = re.sub(unk_regex, "", all_text)
+
         vocab = list(set(all_text))
         return {"vocab": [vocab], "all_text": [all_text]}
 
@@ -426,7 +448,14 @@ def main():
         speech_array, sampling_rate = sf.read(batch["path"])
         batch["speech"] = speech_array
         batch["sampling_rate"] = sampling_rate
-        batch["target_text"] = batch["text"]
+        batch["duration"] = len(speech_array) / sampling_rate
+
+        if unk_regex is None:
+            batch["target_text"] = batch["text"]
+        else: 
+            # setting UNK to characters not present in the language
+            batch["target_text"] = re.sub(unk_regex, "[UNK]", batch["text"])
+
         return batch
 
     train_dataset = train_dataset.map(
@@ -439,6 +468,9 @@ def main():
         remove_columns=eval_dataset.column_names,
         num_proc=data_args.preprocessing_num_workers,
     )
+
+    # filtering training dataset
+    train_dataset = train_dataset.filter(lambda example: example['duration'] >= data_args.min_duration and example['duration'] <= data_args.max_duration)
 
     def prepare_dataset(batch):
         # check that all files have the correct sampling rate
