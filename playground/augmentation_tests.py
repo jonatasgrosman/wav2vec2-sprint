@@ -27,12 +27,12 @@ os.makedirs("_ignore_data", exist_ok=True)
 # creating augmentation pipeline
 
 augmentator = Compose([
-    AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.0005, p=0.5),
+    AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.001, p=0.5),
     Gain(min_gain_in_db=-1, max_gain_in_db=1, p=0.5),
-    FrequencyMask(min_frequency_band=0.0, max_frequency_band=0.5, p=0.5),
-    TimeMask(min_band_part=0.0, max_band_part=0.01, fade=True, p=0.5),
-    TimeStretch(min_rate=0.7, max_rate=1.3, leave_length_unchanged=False, p=0.5),
-    PitchShift(min_semitones=-3, max_semitones=3, p=0.5),
+    PitchShift(min_semitones=-2, max_semitones=2, p=0.5),
+    # TimeStretch(min_rate=0.7, max_rate=1.3, leave_length_unchanged=False, p=0.5),
+    # FrequencyMask(min_frequency_band=0.0, max_frequency_band=0.5, p=0.5),
+    # TimeMask(min_band_part=0.0, max_band_part=0.01, fade=True, p=0.5),
     # ClippingDistortion(min_percentile_threshold=0, max_percentile_threshold=5, p=0.5),
     # LoudnessNormalization(min_lufs_in_db=-31, max_lufs_in_db=-13, p=0.5)
     # PolarityInversion(p=0.5),
@@ -71,7 +71,7 @@ for sample in train_dataset:
 speech_array, sample_rate = librosa.load(male_sample["path"], sr = 16000, res_type="zero_order_hold")
 speech_array_augmented = augmentator(samples=speech_array, sample_rate=sample_rate)
 sf.write("_ignore_data/male_original.wav", speech_array, sample_rate, subtype="PCM_24")
-sf.write("_ignore_data/male_augmented.wav", speech_array_augmented, sample_rate, subtype="PCM_24")
+sf.write("_ignore_data/male_augmented.flac", speech_array_augmented, sample_rate)
 
 speech_array, sample_rate = librosa.load(female_sample["path"], sr = 16000, res_type="zero_order_hold")
 speech_array_augmented = augmentator(samples=speech_array, sample_rate=sample_rate)

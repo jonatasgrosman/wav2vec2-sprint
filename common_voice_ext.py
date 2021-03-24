@@ -721,12 +721,12 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
         path_idx = data_fields.index("path")
 
         augmentator = Compose([
-            AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.0005, p=0.5),
+            AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.001, p=0.5),
             Gain(min_gain_in_db=-1, max_gain_in_db=1, p=0.5),
-            FrequencyMask(min_frequency_band=0.0, max_frequency_band=0.5, p=0.5),
-            TimeMask(min_band_part=0.0, max_band_part=0.01, fade=True, p=0.5),
-            TimeStretch(min_rate=0.7, max_rate=1.3, leave_length_unchanged=False, p=0.5),
-            PitchShift(min_semitones=-3, max_semitones=3, p=0.5),
+            PitchShift(min_semitones=-2, max_semitones=2, p=0.5),
+            # TimeStretch(min_rate=0.7, max_rate=1.3, leave_length_unchanged=False, p=0.5),
+            # FrequencyMask(min_frequency_band=0.0, max_frequency_band=0.5, p=0.5),
+            # TimeMask(min_band_part=0.0, max_band_part=0.01, fade=True, p=0.5),
             # ClippingDistortion(min_percentile_threshold=0, max_percentile_threshold=5, p=0.5),
             # LoudnessNormalization(min_lufs_in_db=-31, max_lufs_in_db=-13, p=0.5)
             # PolarityInversion(p=0.5),
@@ -735,18 +735,18 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
             # Normalize(p=0.5),
         ])
 
-        def _convert_to_wav_and_save_it(path, speech_array=None, sample_rate=16000):
-            """We'll convert all the audio files to WAV format to speedup the loading (it will require about 10x more space in disk)"""
+        def _convert_to_flac_and_save_it(path, speech_array=None, sample_rate=16000):
+            """We'll convert all the audio files to FLAC format to speedup the loading (it will require about 2 more space in disk)"""
             
             if speech_array is None:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    speech_array, sample_rate = librosa.load(path, sr = sample_rate, res_type="zero_order_hold")
+                    speech_array, sample_rate = librosa.load(path, sr = sample_rate)
 
             sample_path, sample_extension = os.path.splitext(path)
-            new_path = f"{sample_path}.wav"
+            new_path = f"{sample_path}.flac"
             
-            sf.write(new_path, speech_array, sample_rate, subtype="PCM_24")
+            sf.write(new_path, speech_array, sample_rate)
 
             return new_path
 
@@ -772,7 +772,7 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
 
                 sample = {key: value for key, value in zip(data_fields, field_values)}
 
-                new_path = _convert_to_wav_and_save_it(sample.get("path"))
+                new_path = _convert_to_flac_and_save_it(sample.get("path"))
                 sample["path"] = new_path
 
                 yield id_, sample
@@ -809,7 +809,7 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                         os.makedirs(os.path.dirname(augmented_sample_path), exist_ok=True)
                         with warnings.catch_warnings():
                             warnings.simplefilter("ignore")
-                            sf.write(augmented_sample_path, speech_array_augmented, sampling_rate, subtype="PCM_24")
+                            sf.write(augmented_sample_path, speech_array_augmented, sampling_rate)
 
                         # updating augmented sample path
                         augmented_sample = sample.copy()
