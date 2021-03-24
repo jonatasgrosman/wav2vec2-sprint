@@ -781,10 +781,10 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 
                 if self.config.augmentation_factor > 0:
 
+                    # loading audio file
+                    speech_array, sampling_rate = sf.read(sample.get("path"))
+                    
                     for i in range(self.config.augmentation_factor):
-                        
-                        # loading audio file
-                        speech_array, sampling_rate = sf.read(sample.get("path"))
 
                         # augmenting data
                         speech_array_augmented = None
