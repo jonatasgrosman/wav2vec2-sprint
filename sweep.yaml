@@ -3,7 +3,7 @@ name: hf-wav2vec-sprint-fi
 method: bayes
 metric:
   goal: minimize
-  name: eval/loss
+  name: eval/wer
 parameters:
   seed:
     value: 42
@@ -71,4 +71,4 @@ parameters:
     values: [0.0, 0.025, 0.05, 0.1, 0.2]
 early_terminate:
   type: hyperband
-  min_iter: 200
+  min_iter: 400
