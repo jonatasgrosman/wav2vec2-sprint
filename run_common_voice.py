@@ -210,6 +210,32 @@ class DataCollatorCTCWithPadding:
 
 
 class CTCTrainer(Trainer):
+
+    def create_scheduler(self, num_training_steps: int):
+        """
+        Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
+
+        This method was built based on https://arxiv.org/pdf/2006.13979 :
+            "The learning rate schedule has three phases: warm up for the first 10% of updates, 
+             keep constant for 40% and then linearly decay for the remainder"
+        
+        Args:
+            num_training_steps (int): The number of training steps to do.
+        """
+        def lr_lambda(current_step):
+            constant_steps = int(num_training_steps * 0.4)
+            warmup_steps = int(num_training_steps * 0.1)
+            if current_step < warmup_steps:
+                return float(current_step) / float(max(1, warmup_steps))
+            elif current_step < warmup_steps + constant_steps:
+                return 1
+            else: 
+                return max(
+                    0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - (warmup_steps + constant_steps)))
+                )
+        
+        self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)
+
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
