@@ -49,10 +49,14 @@ parameters:
     value: True
   group_by_length:
     value: True
+  min_duration:
+    value: 2.0
+  max_duration:
+    value: 9.0
   learning_rate:
     values: [7e-5, 1e-4, 3e-4, 6e-4, 1e-3]
   augmentation_factor:
-    values: [0, 1, 3]
+    values: [0, 1]
   attention_dropout:
     values: [0.0, 0.025, 0.05, 0.1, 0.2]
   activation_dropout:
