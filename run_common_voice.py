@@ -603,9 +603,7 @@ def main():
 
     # save model files
     artifact = wandb.Artifact(name=f"model-{wandb.run.id}", type="model", metadata=metrics)
-    for f in Path(training_args.output_dir).iterdir():
-        if f.is_file():
-            artifact.add_file(f)
+    artifact.add_dir(training_args.output_dir)
     wandb.run.log_artifact(artifact)
 
 
