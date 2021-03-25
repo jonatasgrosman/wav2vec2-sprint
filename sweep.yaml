@@ -42,7 +42,7 @@ parameters:
   load_best_model_at_end:
     value: True
   save_total_limit:
-    value: 3
+    value: 1
   evaluation_strategy:
     value: steps
   freeze_feature_extractor:
