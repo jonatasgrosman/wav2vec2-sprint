@@ -73,7 +73,7 @@ print("Reference:", test_dataset["sentence"][:2])
 
 ## Evaluation
 
-The model can be evaluated as follows on the finnish test data of Common Voice.
+The model can be evaluated as follows on the Finnish test data of Common Voice.
 
 ```python
 import torch
