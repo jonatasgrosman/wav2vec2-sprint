@@ -14,6 +14,8 @@ import soundfile as sf
 from packaging import version
 from torch import nn
 import homoglyphs as hg
+from pathlib import Path
+import wandb
 
 import transformers
 from transformers import (
@@ -43,6 +45,22 @@ logger = logging.getLogger(__name__)
 
 def list_field(default=None, metadata=None):
     return field(default_factory=lambda: default, metadata=metadata)
+
+
+@dataclass
+class AdditionalTrainingArguments:
+    """
+    Additional training arguments
+    """
+
+    lr_warmup_ratio: Optional[float] = field(
+        default=0.1,
+        metadata={"help": "Percentage of steps for LR warmup phase"},
+    )
+    lr_constant_ratio: Optional[float] = field(
+        default=0.4,
+        metadata={"help": "Percentage of steps for LR constant phase (after warmup)"},
+    )
 
 
 @dataclass
@@ -223,6 +241,11 @@ class DataCollatorCTCWithPadding:
 
 class CTCTrainer(Trainer):
 
+    def __init__(self, lr_warmup_ratio=0.1, lr_constant_ratio=0.4, **kwargs):
+        self.lr_warmup_ratio = lr_warmup_ratio
+        self.lr_constant_ratio = lr_constant_ratio
+        super().__init__(**kwargs)
+
     def create_scheduler(self, num_training_steps: int):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
@@ -235,11 +258,11 @@ class CTCTrainer(Trainer):
             num_training_steps (int): The number of training steps to do.
         """
         def lr_lambda(current_step):
-            constant_steps = int(num_training_steps * 0.4)
-            warmup_steps = int(num_training_steps * 0.1)
+            constant_steps = int(num_training_steps * self.lr_constant_ratio)
+            warmup_steps = int(num_training_steps * self.lr_warmup_ratio)
             if current_step < warmup_steps:
                 return float(current_step) / float(max(1, warmup_steps))
-            elif current_step < warmup_steps + constant_steps:
+            elif current_step <= (warmup_steps + constant_steps):
                 return 1
             else: 
                 return max(
@@ -305,13 +328,16 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    # override default run name
+    wandb.init()
+
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, AdditionalTrainingArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, additional_training_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
-        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+        model_args, data_args, additional_training_args, training_args = parser.parse_args_into_dataclasses()
     
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -523,6 +549,8 @@ def main():
 
     # Initialize our Trainer
     trainer = CTCTrainer(
+        additional_training_args.lr_warmup_ratio, 
+        additional_training_args.lr_constant_ratio,
         model=model,
         data_collator=data_collator,
         args=training_args,
@@ -558,7 +586,7 @@ def main():
         trainer.save_state()
 
     # Evaluation
-    results = {}
+    metrics = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate()
@@ -568,7 +596,12 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
-    return results
+    # save model files
+    artifact = wandb.Artifact(name=f"model-{wandb.run.id}", type="model", metadata=metrics)
+    for f in Path(training_args.output_dir).iterdir():
+        if f.is_file():
+            artifact.add_file(f)
+    wandb.run.log_artifact(artifact)
 
 
 if __name__ == "__main__":
