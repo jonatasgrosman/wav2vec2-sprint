@@ -14,9 +14,9 @@ parameters:
   dataset_config_name:
     value: fi
   output_dir:
-    value: /workspace/models-fi/wav2vec2-large-xlsr-fi-sweep
+    value: ../models-fi/wav2vec2-large-xlsr-fi-sweep
   cache_dir:
-    value: /workspace/data-fi
+    value: ../data-fi
   overwrite_output_dir:
     value: True
   fp16:
@@ -32,13 +32,13 @@ parameters:
   do_train:
     value: True
   per_device_train_batch_size:
-    value: 32
+    value: 16
   per_device_eval_batch_size:
-    value: 32
+    value: 16
   dataloader_num_workers:
-    value: 20
+    value: 10
   preprocessing_num_workers:
-    value: 20
+    value: 10
   load_best_model_at_end:
     value: True
   save_total_limit:
@@ -54,25 +54,25 @@ parameters:
   max_duration:
     value: 9.0
   lr_warmup_ratio:
-    value: 0.1
+    value: 0.3
   lr_constant_ratio:
-    value: 0.9
+    value: 0.7
+  augmentation_factor:
+    value: 0
+  layerdrop:
+    value: 0.0
   learning_rate:
     values: [1e-4, 3e-4, 6e-4, 1e-3]
-  augmentation_factor:
-    values: [0, 1]
   attention_dropout:
-    values: [0.05, 0.1, 0.2]
+    values: [0.0, 0.1, 0.2]
   activation_dropout:
-    values: [0.05, 0.1, 0.2]
+    values: [0.0, 0.1, 0.2]
   hidden_dropout:
-    values: [0.05, 0.1, 0.2]
+    values: [0.0, 0.1, 0.2]
   feat_proj_dropout:
-    values: [0.05, 0.1, 0.2]
+    values: [0.0, 0.1, 0.2]
   mask_time_prob:
-    values: [0.05, 0.1, 0.2]
-  layerdrop:
-    values: [0.05, 0.1, 0.2]
+    values: [0.0, 0.1, 0.2]
 early_terminate:
   type: hyperband
   min_iter: 200
