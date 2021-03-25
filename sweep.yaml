@@ -3,7 +3,7 @@ name: hf-wav2vec-sprint-fi
 method: bayes
 metric:
   goal: minimize
-  name: eval/wer
+  name: eval/loss
 parameters:
   seed:
     value: 42
@@ -22,7 +22,7 @@ parameters:
   fp16:
     value: True
   max_steps:
-    value: 1000
+    value: 500
   eval_steps:
     value: 100
   logging_steps:
@@ -42,7 +42,7 @@ parameters:
   load_best_model_at_end:
     value: True
   save_total_limit:
-    value: 1
+    value: 3
   evaluation_strategy:
     value: steps
   freeze_feature_extractor:
@@ -53,22 +53,26 @@ parameters:
     value: 2.0
   max_duration:
     value: 9.0
+  lr_warmup_ratio:
+    value: 0.1
+  lr_constant_ratio:
+    value: 0.9
   learning_rate:
-    values: [7e-5, 1e-4, 3e-4, 6e-4, 1e-3]
+    values: [1e-4, 3e-4, 6e-4, 1e-3]
   augmentation_factor:
     values: [0, 1]
   attention_dropout:
-    values: [0.0, 0.025, 0.05, 0.1, 0.2]
+    values: [0.05, 0.1, 0.2]
   activation_dropout:
-    values: [0.0, 0.025, 0.05, 0.1, 0.2]
+    values: [0.05, 0.1, 0.2]
   hidden_dropout:
-    values: [0.0, 0.025, 0.05, 0.1, 0.2]
+    values: [0.05, 0.1, 0.2]
   feat_proj_dropout:
-    values: [0.0, 0.025, 0.05, 0.1, 0.2]
+    values: [0.05, 0.1, 0.2]
   mask_time_prob:
-    values: [0.0, 0.025, 0.05, 0.1, 0.2]
+    values: [0.05, 0.1, 0.2]
   layerdrop:
-    values: [0.0, 0.025, 0.05, 0.1, 0.2]
+    values: [0.05, 0.1, 0.2]
 early_terminate:
   type: hyperband
-  min_iter: 400
+  min_iter: 200
