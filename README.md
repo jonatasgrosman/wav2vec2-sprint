@@ -43,6 +43,16 @@ $ wandb agent YOUR_SWEEP_ID
 
 # Uploading model to HF
 
+You need to upload the following files to the HF repository
+
+- preprocessor_config.json
+- special_tokens_map.json
+- tokenizer_config.json
+- vocab.json
+- config.json
+- pytorch_model.bin
+- README.md (create this file based on the MODEL_CARD.md)
+
 ```
 $ git config --global user.email "email@example.com"
 
