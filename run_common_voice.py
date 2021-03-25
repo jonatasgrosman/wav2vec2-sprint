@@ -156,6 +156,10 @@ class DataTrainingArguments:
         default=[",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�", "·", "჻", "¿", "¡", "~", "՞", "؟", "،", "।", "॥", "«", "»", "„", "“", "”", "「", "」", "‘", "’", "《", "》"],
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
+    currency_symbols: List[str] = list_field(
+        default=["$", "£", "€", "¥", "₩", "₹", "₽", "₱", "₦", "₼", "ლ", "₭", "₴", "₲", "₫", "₡", "₵", "₿", "฿", "¢"],
+        metadata={"help": "A list of currency symbols."},
+    )
     augmentation_factor: Optional[int] = field(
         default=0,
         metadata={
@@ -395,7 +399,8 @@ def main():
     if data_args.dataset_config_name in hg.Languages.get_all():
         # creating regex to match language specific non valid characters
         alphabet = hg.Languages.get_alphabet([data_args.dataset_config_name])
-        unk_regex = "[^" + re.escape("".join(alphabet)) + "\s\d]"
+        valid_chars = alphabet + data_args.currency_symbols
+        unk_regex = f"[^{re.escape("".join(valid_chars))}\s\d]"
 
     def extract_all_chars(batch):
         all_text = " ".join(batch["text"])
