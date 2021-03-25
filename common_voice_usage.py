@@ -14,7 +14,7 @@ model = Wav2Vec2ForCTC.from_pretrained(MODEL_ID)
 resampler = torchaudio.transforms.Resample(48_000, 16_000)
 
 # Preprocessing the datasets.
-# We need to read the aduio files as arrays
+# We need to read the audio files as arrays
 def speech_file_to_array_fn(batch):
 	speech_array, sampling_rate = torchaudio.load(batch["path"])
 	batch["speech"] = resampler(speech_array).squeeze().numpy()

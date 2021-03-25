@@ -31,7 +31,7 @@ model.to(DEVICE)
 resampler = torchaudio.transforms.Resample(48_000, 16_000)
 
 # Preprocessing the datasets.
-# We need to read the aduio files as arrays
+# We need to read the audio files as arrays
 def speech_file_to_array_fn(batch):
     batch["sentence"] = re.sub(chars_to_ignore_regex, '', batch["sentence"]).lower()
     if unk_regex is not None:
@@ -43,7 +43,7 @@ def speech_file_to_array_fn(batch):
 test_dataset = test_dataset.map(speech_file_to_array_fn)
 
 # Preprocessing the datasets.
-# We need to read the aduio files as arrays
+# We need to read the audio files as arrays
 def evaluate(batch):
 	inputs = processor(batch["speech"], sampling_rate=16_000, return_tensors="pt", padding=True)
 
