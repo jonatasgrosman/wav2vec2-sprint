@@ -142,3 +142,21 @@ _ignore*
 
 # wandB files
 wandb
+
+# training files
+all_results.json
+config,json
+eval_results.json
+preprocessor_config.json
+pytorch_model.bin
+special_tokens_map.json
+tokenizer_config.json
+train_results.json
+trainer_state.json
+training_args.args
+vocab.json
+
+
+
+
+
