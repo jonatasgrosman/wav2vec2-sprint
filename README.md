@@ -61,3 +61,7 @@ $ git commit -m "Initial commit"
 $ git push
 
 ```
+
+# Troubleshooting
+
+- audioread.exceptions.NoBackendError: `$ sudo apt-get install ffmpeg sox libsox-fmt-mp3`
