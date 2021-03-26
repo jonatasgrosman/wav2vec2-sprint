@@ -683,6 +683,7 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "train.tsv"),
                     "path_to_clips": abs_path_to_clips,
+                    "preprocess": True
                 },
             ),
             datasets.SplitGenerator(
@@ -690,6 +691,7 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "test.tsv"),
                     "path_to_clips": abs_path_to_clips,
+                    "preprocess": True
                 },
             ),
             datasets.SplitGenerator(
@@ -697,6 +699,7 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "dev.tsv"),
                     "path_to_clips": abs_path_to_clips,
+                    "preprocess": True
                 },
             ),
             datasets.SplitGenerator(
@@ -704,6 +707,7 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "other.tsv"),
                     "path_to_clips": abs_path_to_clips,
+                    "preprocess": False
                 },
             ),
             datasets.SplitGenerator(
@@ -711,19 +715,20 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "invalidated.tsv"),
                     "path_to_clips": abs_path_to_clips,
+                    "preprocess": False
                 },
             ),
         ]
 
-    def _generate_examples(self, filepath, path_to_clips):
+    def _generate_examples(self, filepath, path_to_clips, preprocess):
         """ Yields examples. """
         data_fields = list(self._info().features.keys())
         path_idx = data_fields.index("path")
 
         augmentator = Compose([
-            AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.001, p=0.5),
+            AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
             Gain(min_gain_in_db=-1, max_gain_in_db=1, p=0.5),
-            PitchShift(min_semitones=-2, max_semitones=2, p=0.5),
+            # PitchShift(min_semitones=-2, max_semitones=2, p=0.5),
             # TimeStretch(min_rate=0.7, max_rate=1.3, leave_length_unchanged=False, p=0.5),
             # FrequencyMask(min_frequency_band=0.0, max_frequency_band=0.5, p=0.5),
             # TimeMask(min_band_part=0.0, max_band_part=0.01, fade=True, p=0.5),
@@ -735,18 +740,19 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
             # Normalize(p=0.5),
         ])
 
-        def _convert_to_flac_and_save_it(path, speech_array=None, sample_rate=16000):
+        def _convert_to_flac_and_save_it(path):
             """We'll convert all the audio files to FLAC format to speedup the loading (it will require about 2 more space in disk)"""
             
-            if speech_array is None:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    speech_array, sample_rate = librosa.load(path, sr = sample_rate)
-
             sample_path, sample_extension = os.path.splitext(path)
             new_path = f"{sample_path}.flac"
+
+            if not os.path.isfile(new_path):
             
-            sf.write(new_path, speech_array, sample_rate)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    speech_array, sample_rate = librosa.load(path)
+                
+                sf.write(new_path, speech_array, sample_rate)
 
             return new_path
 
@@ -772,14 +778,15 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
 
                 sample = {key: value for key, value in zip(data_fields, field_values)}
 
-                new_path = _convert_to_flac_and_save_it(sample.get("path"))
-                sample["path"] = new_path
+                if preprocess:
+                    new_path = _convert_to_flac_and_save_it(sample.get("path"))
+                    sample["path"] = new_path
 
                 yield id_, sample
 
                 id_ += 1
                 
-                if self.config.augmentation_factor > 0:
+                if preprocess and self.config.augmentation_factor > 0:
 
                     # loading audio file
                     speech_array, sampling_rate = sf.read(sample.get("path"))
