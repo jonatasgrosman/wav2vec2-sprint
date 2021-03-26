@@ -64,15 +64,15 @@ parameters:
   learning_rate:
     values: [1e-4, 3e-4, 6e-4, 1e-3]
   attention_dropout:
-    values: [0.1, 0.2]
+    values: [0.05, 0.1, 0.2]
   activation_dropout:
-    values: [0.1, 0.2]
+    values: [0.05, 0.1, 0.2]
   hidden_dropout:
-    values: [0.1, 0.2]
+    values: [0.05, 0.1, 0.2]
   feat_proj_dropout:
-    values: [0.1, 0.2]
+    values: [0.05, 0.1, 0.2]
   mask_time_prob:
-    values: [0.05, 0.1]
+    values: [0.05, 0.1, 0.2]
 early_terminate:
   type: hyperband
   min_iter: 200
