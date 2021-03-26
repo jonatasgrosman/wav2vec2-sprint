@@ -155,6 +155,7 @@ train_results.json
 trainer_state.json
 training_args.args
 vocab.json
+*.zip
 
 
 
