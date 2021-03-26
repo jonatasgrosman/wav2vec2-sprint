@@ -61,6 +61,14 @@ class AdditionalTrainingArguments:
         default=0.4,
         metadata={"help": "Percentage of steps for LR constant phase (after warmup)"},
     )
+    upload_final_model_to_wandb: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Upload the final trained model to the WandB artifacts repository"},
+    )
+    upload_model_to_wandb_each_step: Optional[int] = field(
+        default=None,
+        metadata={"help": "Frequency (in steps) to upload the trained model to the WandB artifacts repository"},
+    )
 
 
 @dataclass
@@ -245,7 +253,9 @@ class DataCollatorCTCWithPadding:
 
 class CTCTrainer(Trainer):
 
-    def __init__(self, lr_warmup_ratio=0.1, lr_constant_ratio=0.4, **kwargs):
+    def __init__(self, model_output_dir, upload_model_to_wandb_each_step=None, lr_warmup_ratio=0.1, lr_constant_ratio=0.4, **kwargs):
+        self.model_output_dir = model_output_dir
+        self.upload_model_to_wandb_each_step = upload_model_to_wandb_each_step
         self.lr_warmup_ratio = lr_warmup_ratio
         self.lr_constant_ratio = lr_constant_ratio
         super().__init__(**kwargs)
@@ -324,7 +334,63 @@ class CTCTrainer(Trainer):
         else:
             loss.backward()
 
+        if self.upload_model_to_wandb_each_step is not None and self.state.global_step > 0 \
+            and self.state.global_step % self.upload_model_to_wandb_each_step == 0:
+            upload_model_to_wandb(self.model_output_dir, name=f"{wandb.run.name}_{self.state.global_step}", metadata={"loss": float(loss)})
+
         return loss.detach()
+
+
+def build_tokenizer(train_dataset, eval_dataset, unk_regex):
+
+    def extract_all_chars(batch):
+        all_text = " ".join(batch["text"])
+
+        if unk_regex is not None:
+            all_text = re.sub(unk_regex, "", all_text)
+
+        vocab = list(set(all_text))
+        return {"vocab": [vocab], "all_text": [all_text]}
+
+    vocab_train = train_dataset.map(
+        extract_all_chars,
+        batched=True,
+        batch_size=-1,
+        keep_in_memory=True,
+        remove_columns=train_dataset.column_names,
+    )
+    vocab_test = eval_dataset.map(
+        extract_all_chars,
+        batched=True,
+        batch_size=-1,
+        keep_in_memory=True,
+        remove_columns=eval_dataset.column_names,
+    )
+
+    vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
+    vocab_dict = {v: k for k, v in enumerate(vocab_list)}
+    vocab_dict["|"] = vocab_dict[" "]
+    del vocab_dict[" "]
+    vocab_dict["<unk>"] = len(vocab_dict)
+    vocab_dict["<pad>"] = len(vocab_dict)
+    vocab_dict["<s>"] = len(vocab_dict)
+    vocab_dict["</s>"] = len(vocab_dict)
+
+    with open("vocab.json", "w") as vocab_file:
+        json.dump(vocab_dict, vocab_file)
+
+    return Wav2Vec2CTCTokenizer(
+        "vocab.json",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        word_delimiter_token="|",
+    )
+
+
+def upload_model_to_wandb(model_output_dir, name, metadata=None):
+    artifact = wandb.Artifact(name=name, type="model", metadata=metadata)
+    artifact.add_dir(model_output_dir)
+    wandb.run.log_artifact(artifact)
 
 
 def main():
@@ -389,7 +455,7 @@ def main():
     chars_to_ignore_regex = f'[{re.escape("".join(data_args.chars_to_ignore))}]'
 
     def remove_special_characters(batch):
-        batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).lower() + " "
+        batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).upper() + " "
         return batch
 
     train_dataset = train_dataset.map(remove_special_characters, remove_columns=["sentence"])
@@ -402,55 +468,22 @@ def main():
         valid_chars = alphabet + data_args.currency_symbols
         unk_regex = "[^"+re.escape("".join(valid_chars))+"\s\d]"
 
-    def extract_all_chars(batch):
-        all_text = " ".join(batch["text"])
-
-        if unk_regex is not None:
-            all_text = re.sub(unk_regex, "", all_text)
-
-        vocab = list(set(all_text))
-        return {"vocab": [vocab], "all_text": [all_text]}
-
-    vocab_train = train_dataset.map(
-        extract_all_chars,
-        batched=True,
-        batch_size=-1,
-        keep_in_memory=True,
-        remove_columns=train_dataset.column_names,
-    )
-    vocab_test = train_dataset.map(
-        extract_all_chars,
-        batched=True,
-        batch_size=-1,
-        keep_in_memory=True,
-        remove_columns=eval_dataset.column_names,
-    )
-
-    vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
-    vocab_dict = {v: k for k, v in enumerate(vocab_list)}
-    vocab_dict["|"] = vocab_dict[" "]
-    del vocab_dict[" "]
-    vocab_dict["[UNK]"] = len(vocab_dict)
-    vocab_dict["[PAD]"] = len(vocab_dict)
-
-    with open("vocab.json", "w") as vocab_file:
-        json.dump(vocab_dict, vocab_file)
 
     # Load pretrained model and tokenizer
     #
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    tokenizer = Wav2Vec2CTCTokenizer(
-        "vocab.json",
-        unk_token="[UNK]",
-        pad_token="[PAD]",
-        word_delimiter_token="|",
-    )
-    feature_extractor = Wav2Vec2FeatureExtractor(
-        feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
-    )
-    processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    
+    if model_args.model_name_or_path == "facebook/wav2vec2-large-xlsr-53":
+        tokenizer = build_tokenizer(train_dataset, eval_dataset, unk_regex)
+        feature_extractor = Wav2Vec2FeatureExtractor(
+            feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
+        )
+        processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    else:
+        processor = Wav2Vec2Processor.from_pretrained(model_args.model_name_or_path)
+    
     model = Wav2Vec2ForCTC.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -554,8 +587,10 @@ def main():
 
     # Initialize our Trainer
     trainer = CTCTrainer(
-        additional_training_args.lr_warmup_ratio, 
-        additional_training_args.lr_constant_ratio,
+        model_output_dir=training_args.output_dir,
+        upload_model_to_wandb_each_step=additional_training_args.upload_model_to_wandb_each_step,
+        lr_warmup_ratio=additional_training_args.lr_warmup_ratio, 
+        lr_constant_ratio=additional_training_args.lr_constant_ratio,
         model=model,
         data_collator=data_collator,
         args=training_args,
@@ -602,10 +637,8 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     # save model files
-    artifact = wandb.Artifact(name=f"model-{wandb.run.id}", type="model", metadata=metrics)
-    artifact.add_dir(training_args.output_dir)
-    wandb.run.log_artifact(artifact)
-
+    if additional_training_args.upload_final_model_to_wandb:
+        upload_model_to_wandb(training_args.output_dir, name=f"{wandb.run.name}_final", metadata=metrics)
 
 if __name__ == "__main__":
     main()
