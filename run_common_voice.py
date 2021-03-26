@@ -376,11 +376,13 @@ def build_tokenizer(model_output_dir, train_dataset, eval_dataset, unk_regex):
     vocab_dict["<s>"] = len(vocab_dict)
     vocab_dict["</s>"] = len(vocab_dict)
 
-    with open(os.path.join(model_output_dir, "vocab.json"), "w") as vocab_file:
+    vocab_path = os.path.join(model_output_dir, "vocab.json")
+
+    with open(vocab_path, "w") as vocab_file:
         json.dump(vocab_dict, vocab_file)
 
     return Wav2Vec2CTCTokenizer(
-        "vocab.json",
+        vocab_path,
         unk_token="<unk>",
         pad_token="<pad>",
         word_delimiter_token="|",
@@ -408,7 +410,9 @@ def main():
         model_args, data_args, additional_training_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, additional_training_args, training_args = parser.parse_args_into_dataclasses()
-    
+
+    os.makedirs(training_args.output_dir, exist_ok=True)
+
     # Detecting last checkpoint.
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
