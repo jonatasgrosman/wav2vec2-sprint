@@ -13,3 +13,4 @@ wandb==0.10.23
 homoglyphs==2.0.4
 pandas==1.2.3
 matplotlib==3.3.4
+gdown==3.12.2
