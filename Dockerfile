@@ -24,7 +24,7 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     pyloudnorm==0.1.0 \
     wandb==0.10.23 \
     homoglyphs==2.0.4 \
-    gdown==3.12.2
+    gdown
 
 RUN pip3 uninstall -y typing allennlp
 
