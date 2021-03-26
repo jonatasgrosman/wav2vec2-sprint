@@ -58,7 +58,7 @@ parameters:
   lr_constant_ratio:
     value: 0.7
   augmentation_factor:
-    value: 0
+    value: 1
   layerdrop:
     value: 0.0
   learning_rate:
