@@ -750,7 +750,7 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
             
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    speech_array, sample_rate = librosa.load(path)
+                    speech_array, sample_rate = librosa.load(path, sr=16_000)
                 
                 sf.write(new_path, speech_array, sample_rate)
 
