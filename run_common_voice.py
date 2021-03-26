@@ -341,7 +341,7 @@ class CTCTrainer(Trainer):
         return loss.detach()
 
 
-def build_tokenizer(train_dataset, eval_dataset, unk_regex):
+def build_tokenizer(model_output_dir, train_dataset, eval_dataset, unk_regex):
 
     def extract_all_chars(batch):
         all_text = " ".join(batch["text"])
@@ -376,7 +376,7 @@ def build_tokenizer(train_dataset, eval_dataset, unk_regex):
     vocab_dict["<s>"] = len(vocab_dict)
     vocab_dict["</s>"] = len(vocab_dict)
 
-    with open("vocab.json", "w") as vocab_file:
+    with open(os.path.join(model_output_dir, "vocab.json"), "w") as vocab_file:
         json.dump(vocab_dict, vocab_file)
 
     return Wav2Vec2CTCTokenizer(
@@ -447,9 +447,15 @@ def main():
 
     # Get the datasets:
     train_dataset = datasets.load_dataset(
-        "common_voice_ext.py", data_args.dataset_config_name, augmentation_factor=data_args.augmentation_factor, split=data_args.train_split_name, cache_dir=model_args.cache_dir
+        "common_voice_ext.py", data_args.dataset_config_name, 
+        augmentation_factor=data_args.augmentation_factor, 
+        split=data_args.train_split_name, cache_dir=model_args.cache_dir
     )
-    eval_dataset = datasets.load_dataset("common_voice_ext.py", data_args.dataset_config_name, split="test", cache_dir=model_args.cache_dir)
+    eval_dataset = datasets.load_dataset(
+        "common_voice_ext.py", data_args.dataset_config_name,
+        augmentation_factor=0,
+        split="test", cache_dir=model_args.cache_dir
+    )
 
     # Create and save tokenizer
     chars_to_ignore_regex = f'[{re.escape("".join(data_args.chars_to_ignore))}]'
@@ -476,7 +482,7 @@ def main():
     # download model & vocab.
     
     if model_args.model_name_or_path == "facebook/wav2vec2-large-xlsr-53":
-        tokenizer = build_tokenizer(train_dataset, eval_dataset, unk_regex)
+        tokenizer = build_tokenizer(training_args.output_dir, train_dataset, eval_dataset, unk_regex)
         feature_extractor = Wav2Vec2FeatureExtractor(
             feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
         )
