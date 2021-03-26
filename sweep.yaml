@@ -14,9 +14,9 @@ parameters:
   dataset_config_name:
     value: fi
   output_dir:
-    value: ../models/wav2vec2-large-xlsr-fi-sweep
+    value: ../models/fi/wav2vec2-large-xlsr-fi-sweep
   cache_dir:
-    value: ../data
+    value: ../data/fi
   overwrite_output_dir:
     value: True
   fp16:
