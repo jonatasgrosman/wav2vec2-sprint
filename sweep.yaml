@@ -1,6 +1,6 @@
 program: run_common_voice.py
 name: hf-wav2vec-sprint-fi
-method: bayes
+method: random
 metric:
   goal: minimize
   name: eval/loss
@@ -54,11 +54,11 @@ parameters:
   max_duration:
     value: 9.0
   lr_warmup_ratio:
-    value: 0.3
+    value: 0.5
   lr_constant_ratio:
-    value: 0.7
+    value: 0.0
   augmentation_factor:
-    value: 1
+    values: [0, 1]
   layerdrop:
     value: 0.0
   learning_rate:
