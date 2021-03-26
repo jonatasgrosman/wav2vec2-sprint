@@ -23,7 +23,8 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     audiomentations==0.16.0 \
     pyloudnorm==0.1.0 \
     wandb==0.10.23 \
-    homoglyphs==2.0.4
+    homoglyphs==2.0.4 \
+    gdown==3.12.2
 
 RUN pip3 uninstall -y typing allennlp
 
