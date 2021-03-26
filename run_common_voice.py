@@ -30,6 +30,7 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_pt_utils import LengthGroupedSampler, DistributedLengthGroupedSampler
 
 
 if is_apex_available():
@@ -253,12 +254,41 @@ class DataCollatorCTCWithPadding:
 
 class CTCTrainer(Trainer):
 
-    def __init__(self, model_output_dir, upload_model_to_wandb_each_step=None, lr_warmup_ratio=0.1, lr_constant_ratio=0.4, **kwargs):
+    def __init__(self, model_output_dir, length_field_name="length", upload_model_to_wandb_each_step=None, lr_warmup_ratio=0.1, lr_constant_ratio=0.4, **kwargs):
+        super().__init__(**kwargs)
         self.model_output_dir = model_output_dir
+        self.length_field_name = length_field_name
         self.upload_model_to_wandb_each_step = upload_model_to_wandb_each_step
         self.lr_warmup_ratio = lr_warmup_ratio
         self.lr_constant_ratio = lr_constant_ratio
-        super().__init__(**kwargs)
+        self.length_field_name = length_field_name
+
+    def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
+        if isinstance(self.train_dataset, torch.utils.data.IterableDataset) or not isinstance(
+            self.train_dataset, collections.abc.Sized
+        ):
+            return None
+
+        # Build the sampler.
+        if self.args.group_by_length:
+            lengths = self.train_dataset[self.length_field_name] if self.length_field_name is not None else None
+            model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
+            if self.args.world_size <= 1:
+                return LengthGroupedSampler(
+                    self.train_dataset, self.args.train_batch_size, lengths=lengths, model_input_name=model_input_name
+                )
+            else:
+                return DistributedLengthGroupedSampler(
+                    self.train_dataset,
+                    self.args.train_batch_size,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                    lengths=lengths,
+                    model_input_name=model_input_name,
+                )
+
+        else:
+            return super()._get_train_sampler()
 
     def create_scheduler(self, num_training_steps: int):
         """
@@ -552,6 +582,8 @@ def main():
             len(set(batch["sampling_rate"])) == 1
         ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
         batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
+        batch["length"] = len(batch["input_values"])
+        
         # Setup the processor for targets
         with processor.as_target_processor():
             batch["labels"] = processor(batch["target_text"]).input_ids
@@ -598,6 +630,7 @@ def main():
     # Initialize our Trainer
     trainer = CTCTrainer(
         model_output_dir=training_args.output_dir,
+        length_field_name="length",
         upload_model_to_wandb_each_step=additional_training_args.upload_model_to_wandb_each_step,
         lr_warmup_ratio=additional_training_args.lr_warmup_ratio, 
         lr_constant_ratio=additional_training_args.lr_constant_ratio,
