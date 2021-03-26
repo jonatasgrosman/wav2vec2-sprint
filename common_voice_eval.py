@@ -33,7 +33,7 @@ resampler = torchaudio.transforms.Resample(48_000, 16_000)
 # Preprocessing the datasets.
 # We need to read the audio files as arrays
 def speech_file_to_array_fn(batch):
-    batch["sentence"] = re.sub(chars_to_ignore_regex, '', batch["sentence"]).lower()
+    batch["sentence"] = re.sub(chars_to_ignore_regex, '', batch["sentence"]).upper()
     if unk_regex is not None:
         batch["sentence"] = re.sub(unk_regex, "[UNK]", batch["sentence"])
     speech_array, sampling_rate = torchaudio.load(batch["path"])
