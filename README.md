@@ -1,4 +1,8 @@
-# Building docker image
+# Wav2Vec Trainer
+
+This repository is based on https://github.com/jqueguiner/wav2vec2-sprint
+
+## Building docker image
 
 Dockerhub available at https://hub.docker.com/r/patilsuraj/hf-wav2vec
 
@@ -20,7 +24,7 @@ to push it to dockerhub
 $ docker push your-dockerhub-user/hf-wav2vec-sprint
 ```
 
-# Running WandB sweep
+## Running WandB sweep
 
 Initialize your sweep from any machine...
 
@@ -41,7 +45,7 @@ $ export WANDB_PROJECT=YOUR_WANDB_PROJECT
 $ wandb agent YOUR_SWEEP_ID
 ```
 
-# Uploading model to HF
+## Uploading model to HF
 
 You need to upload the following files to the HF repository
 
@@ -72,6 +76,6 @@ $ git push
 
 ```
 
-# Troubleshooting
+## Troubleshooting
 
 - audioread.exceptions.NoBackendError: `$ sudo apt-get install ffmpeg sox libsox-fmt-mp3`
