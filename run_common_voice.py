@@ -371,7 +371,7 @@ class CTCTrainer(Trainer):
         return loss.detach()
 
 
-def build_tokenizer(model_output_dir, train_dataset, eval_dataset, unk_regex):
+def build_tokenizer(model_output_dir, train_dataset, eval_dataset, unk_regex, num_proc):
 
     def extract_all_chars(batch):
         all_text = " ".join(batch["text"])
@@ -388,6 +388,7 @@ def build_tokenizer(model_output_dir, train_dataset, eval_dataset, unk_regex):
         batch_size=-1,
         keep_in_memory=True,
         remove_columns=train_dataset.column_names,
+        num_proc=num_proc
     )
     vocab_test = eval_dataset.map(
         extract_all_chars,
@@ -395,6 +396,7 @@ def build_tokenizer(model_output_dir, train_dataset, eval_dataset, unk_regex):
         batch_size=-1,
         keep_in_memory=True,
         remove_columns=eval_dataset.column_names,
+        num_proc=num_proc
     )
 
     vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
@@ -498,8 +500,8 @@ def main():
         batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).upper() + " "
         return batch
 
-    train_dataset = train_dataset.map(remove_special_characters, remove_columns=["sentence"])
-    eval_dataset = eval_dataset.map(remove_special_characters, remove_columns=["sentence"])
+    train_dataset = train_dataset.map(remove_special_characters, remove_columns=["sentence"], num_proc=data_args.preprocessing_num_workers)
+    eval_dataset = eval_dataset.map(remove_special_characters, remove_columns=["sentence"], num_proc=data_args.preprocessing_num_workers)
     
     unk_regex = None
     if data_args.dataset_config_name in hg.Languages.get_all():
@@ -516,7 +518,7 @@ def main():
     # download model & vocab.
     
     if model_args.model_name_or_path == "facebook/wav2vec2-large-xlsr-53":
-        tokenizer = build_tokenizer(training_args.output_dir, train_dataset, eval_dataset, unk_regex)
+        tokenizer = build_tokenizer(training_args.output_dir, train_dataset, eval_dataset, unk_regex, data_args.preprocessing_num_workers)
         feature_extractor = Wav2Vec2FeatureExtractor(
             feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
         )
@@ -574,7 +576,10 @@ def main():
     )
 
     # filtering training dataset
-    train_dataset = train_dataset.filter(lambda example: example['duration'] >= data_args.min_duration and example['duration'] <= data_args.max_duration)
+    train_dataset = train_dataset.filter(
+        lambda example: example['duration'] >= data_args.min_duration and example['duration'] <= data_args.max_duration,
+        num_proc=data_args.preprocessing_num_workers
+    )
 
     def prepare_dataset(batch):
         # check that all files have the correct sampling rate
