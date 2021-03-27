@@ -386,17 +386,17 @@ def build_tokenizer(model_output_dir, train_dataset, eval_dataset, unk_regex, nu
         extract_all_chars,
         batched=True,
         batch_size=-1,
-        keep_in_memory=True,
         remove_columns=train_dataset.column_names,
-        num_proc=num_proc
+        num_proc=num_proc,
+        keep_in_memory=True
     )
     vocab_test = eval_dataset.map(
         extract_all_chars,
         batched=True,
         batch_size=-1,
-        keep_in_memory=True,
         remove_columns=eval_dataset.column_names,
-        num_proc=num_proc
+        num_proc=num_proc,
+        keep_in_memory=True
     )
 
     vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
@@ -500,8 +500,18 @@ def main():
         batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).upper() + " "
         return batch
 
-    train_dataset = train_dataset.map(remove_special_characters, remove_columns=["sentence"], num_proc=data_args.preprocessing_num_workers)
-    eval_dataset = eval_dataset.map(remove_special_characters, remove_columns=["sentence"], num_proc=data_args.preprocessing_num_workers)
+    train_dataset = train_dataset.map(
+        remove_special_characters,
+        remove_columns=["sentence"], 
+        num_proc=data_args.preprocessing_num_workers,
+        keep_in_memory=True
+    )
+    eval_dataset = eval_dataset.map(
+        remove_special_characters, 
+        remove_columns=["sentence"], 
+        num_proc=data_args.preprocessing_num_workers,
+        keep_in_memory=True
+    )
     
     unk_regex = None
     if data_args.dataset_config_name in hg.Languages.get_all():
@@ -543,10 +553,10 @@ def main():
     )
 
     if data_args.max_train_samples is not None:
-        train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        train_dataset = train_dataset.select(range(data_args.max_train_samples), keep_in_memory=True)
 
     if data_args.max_val_samples is not None:
-        eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+        eval_dataset = eval_dataset.select(range(data_args.max_val_samples), keep_in_memory=True)
 
     # Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
@@ -568,17 +578,20 @@ def main():
         speech_file_to_array_fn,
         remove_columns=train_dataset.column_names,
         num_proc=data_args.preprocessing_num_workers,
+        keep_in_memory=True
     )
     eval_dataset = eval_dataset.map(
         speech_file_to_array_fn,
         remove_columns=eval_dataset.column_names,
         num_proc=data_args.preprocessing_num_workers,
+        keep_in_memory=True
     )
 
     # filtering training dataset
     train_dataset = train_dataset.filter(
         lambda example: example['duration'] >= data_args.min_duration and example['duration'] <= data_args.max_duration,
-        num_proc=data_args.preprocessing_num_workers
+        num_proc=data_args.preprocessing_num_workers,
+        keep_in_memory=True
     )
 
     def prepare_dataset(batch):
@@ -600,6 +613,7 @@ def main():
         batch_size=training_args.per_device_train_batch_size,
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
+        keep_in_memory=True
     )
     eval_dataset = eval_dataset.map(
         prepare_dataset,
@@ -607,6 +621,7 @@ def main():
         batch_size=training_args.per_device_train_batch_size,
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
+        keep_in_memory=True
     )
 
     # Metric
