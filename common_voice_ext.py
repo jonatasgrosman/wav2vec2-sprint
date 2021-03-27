@@ -17,6 +17,8 @@
 from __future__ import absolute_import, division, print_function
 
 import os
+import re
+import homoglyphs as hg
 
 import datasets
 
@@ -624,6 +626,15 @@ class CommonVoiceConfig(datasets.BuilderConfig):
         self.validated_hr_total = kwargs.pop("val_hrs", None)
         self.total_hr_total = kwargs.pop("total_hrs", None)
         self.num_of_voice = kwargs.pop("num_of_voice", None)
+        
+        self.unk_token_regex = None
+        if self.language in hg.Languages.get_all():
+            # creating regex to match language specific non valid characters
+            currency_symbols = ["$", "£", "€", "¥", "₩", "₹", "₽", "₱", "₦", "₼", "ლ", "₭", "₴", "₲", "₫", "₡", "₵", "₿", "฿", "¢"]
+            alphabet = list(hg.Languages.get_alphabet([self.language]))
+            valid_chars = alphabet + currency_symbols
+            self.unk_token_regex = "[^"+re.escape("".join(valid_chars))+"\s\d]"
+        
         description = f"Common Voice speech to text dataset in {self.language} version {self.sub_version} of {self.date_of_snapshot}. The dataset comprises {self.validated_hr_total} of validated transcribed speech data from {self.num_of_voice} speakers. The dataset has a size of {self.size}"
         super(CommonVoiceConfig, self).__init__(
             name=name, version=datasets.Version("6.1.0", ""), description=description, **kwargs
@@ -781,6 +792,9 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 if preprocess:
                     new_path = _convert_to_flac_and_save_it(sample.get("path"))
                     sample["path"] = new_path
+
+                    if self.config.unk_token_regex is not None:
+                        sample["sentence"] = re.sub(self.config.unk_token_regex, "<unk>", sample["sentence"])
 
                 yield id_, sample
 

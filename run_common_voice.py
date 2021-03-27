@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sys
+import collections
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
@@ -13,7 +14,6 @@ import torch
 import soundfile as sf
 from packaging import version
 from torch import nn
-import homoglyphs as hg
 from pathlib import Path
 import wandb
 
@@ -164,10 +164,6 @@ class DataTrainingArguments:
     chars_to_ignore: List[str] = list_field(
         default=[",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�", "·", "჻", "¿", "¡", "~", "՞", "؟", "،", "।", "॥", "«", "»", "„", "“", "”", "「", "」", "‘", "’", "《", "》"],
         metadata={"help": "A list of characters to remove from the transcripts."},
-    )
-    currency_symbols: List[str] = list_field(
-        default=["$", "£", "€", "¥", "₩", "₹", "₽", "₱", "₦", "₼", "ლ", "₭", "₴", "₲", "₫", "₡", "₵", "₿", "฿", "¢"],
-        metadata={"help": "A list of currency symbols."},
     )
     augmentation_factor: Optional[int] = field(
         default=0,
@@ -371,14 +367,10 @@ class CTCTrainer(Trainer):
         return loss.detach()
 
 
-def build_tokenizer(model_output_dir, train_dataset, eval_dataset, unk_regex, num_proc):
+def build_tokenizer(model_output_dir, train_dataset, eval_dataset, num_proc):
 
     def extract_all_chars(batch):
-        all_text = " ".join(batch["text"])
-
-        if unk_regex is not None:
-            all_text = re.sub(unk_regex, "", all_text)
-
+        all_text = " ".join(batch["text"]).replace("<unk>","")
         vocab = list(set(all_text))
         return {"vocab": [vocab], "all_text": [all_text]}
 
@@ -485,12 +477,16 @@ def main():
     train_dataset = datasets.load_dataset(
         "common_voice_ext.py", data_args.dataset_config_name, 
         augmentation_factor=data_args.augmentation_factor, 
-        split=data_args.train_split_name, cache_dir=model_args.cache_dir
+        split=data_args.train_split_name, 
+        cache_dir=model_args.cache_dir,
+        keep_in_memory=True
     )
     eval_dataset = datasets.load_dataset(
         "common_voice_ext.py", data_args.dataset_config_name,
         augmentation_factor=0,
-        split="test", cache_dir=model_args.cache_dir
+        split="test", 
+        cache_dir=model_args.cache_dir,
+        keep_in_memory=True
     )
 
     # Create and save tokenizer
@@ -513,14 +509,6 @@ def main():
         keep_in_memory=True
     )
     
-    unk_regex = None
-    if data_args.dataset_config_name in hg.Languages.get_all():
-        # creating regex to match language specific non valid characters
-        alphabet = list(hg.Languages.get_alphabet([data_args.dataset_config_name]))
-        valid_chars = alphabet + data_args.currency_symbols
-        unk_regex = "[^"+re.escape("".join(valid_chars))+"\s\d]"
-
-
     # Load pretrained model and tokenizer
     #
     # Distributed training:
@@ -528,7 +516,7 @@ def main():
     # download model & vocab.
     
     if model_args.model_name_or_path == "facebook/wav2vec2-large-xlsr-53":
-        tokenizer = build_tokenizer(training_args.output_dir, train_dataset, eval_dataset, unk_regex, data_args.preprocessing_num_workers)
+        tokenizer = build_tokenizer(training_args.output_dir, train_dataset, eval_dataset, data_args.preprocessing_num_workers)
         feature_extractor = Wav2Vec2FeatureExtractor(
             feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
         )
@@ -565,12 +553,7 @@ def main():
         batch["speech"] = speech_array
         batch["sampling_rate"] = sampling_rate
         batch["duration"] = len(speech_array) / sampling_rate
-
-        if unk_regex is None:
-            batch["target_text"] = batch["text"]
-        else: 
-            # setting UNK to characters not present in the language
-            batch["target_text"] = re.sub(unk_regex, "[UNK]", batch["text"])
+        batch["target_text"] = batch["text"]
 
         return batch
 
@@ -600,7 +583,6 @@ def main():
             len(set(batch["sampling_rate"])) == 1
         ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
         batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
-        batch["length"] = len(batch["input_values"])
         
         # Setup the processor for targets
         with processor.as_target_processor():
@@ -620,6 +602,17 @@ def main():
         remove_columns=eval_dataset.column_names,
         batch_size=training_args.per_device_train_batch_size,
         batched=True,
+        num_proc=data_args.preprocessing_num_workers,
+        keep_in_memory=True
+    )
+
+    # Pre-compute sample lengths
+    def input_lengths(example):
+        example["length"] = len(example["input_values"])
+        return example
+
+    train_dataset = train_dataset.map(
+        input_lengths,
         num_proc=data_args.preprocessing_num_workers,
         keep_in_memory=True
     )
