@@ -23,6 +23,7 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     samplerate==0.1.0 \
     scipy==1.5.4 \
     audiomentations==0.16.0 \
+    torch-audiomentations==0.6.0 \
     pyloudnorm==0.1.0 \
     wandb==0.10.23 \
     homoglyphs==2.0.4 \
