@@ -19,27 +19,13 @@ from __future__ import absolute_import, division, print_function
 import os
 import re
 import homoglyphs as hg
+import gdown
 
 import datasets
 
 import soundfile as sf
 import librosa
 import warnings
-from audiomentations import (
-    Compose,
-    AddGaussianNoise,
-    AddGaussianSNR,
-    ClippingDistortion,
-    FrequencyMask,
-    Gain,
-    LoudnessNormalization,
-    Normalize,
-    PitchShift,
-    PolarityInversion,
-    Shift,
-    TimeMask,
-    TimeStretch,
-)
 
 _DATA_URL = "https://voice-prod-bundler-ee1969a6ce8178826482b88e843c335139bd3fb4.s3.amazonaws.com/cv-corpus-6.1-2020-12-11/{}.tar.gz"
 
@@ -605,6 +591,13 @@ _LANGUAGES = {
     },
 }
 
+_CSS10_URLS = {
+    "el": "https://drive.google.com/uc?id=1BdYXzE8ffanCtyrTxYK1TJ9k8-LpvQcn",
+    "fi": "https://drive.google.com/uc?id=16S_p6NAHHdD50nwysIEl1uEo-z3s8xf1",
+    "hu": "https://drive.google.com/uc?id=1XspdS3ojsOqBMKr_3iKxIcwtSmI41Wd3",
+    "ja": "https://drive.google.com/uc?id=1WXwqYDL5n2WzBXwI0UjbmBTX6h1wXRgx",
+    "nl": "https://drive.google.com/uc?id=1iW_smYD4Pb2iI8kGSIJgByKPNwwy1cX2",
+}
 
 class CommonVoiceConfig(datasets.BuilderConfig):
     """BuilderConfig for CommonVoice."""
@@ -619,7 +612,6 @@ class CommonVoiceConfig(datasets.BuilderConfig):
           **kwargs: keyword arguments forwarded to super.
         """
         self.sub_version = sub_version
-        self.augmentation_factor = kwargs.pop("augmentation_factor", 0)
         self.language = kwargs.pop("language", None)
         self.date_of_snapshot = kwargs.pop("date", None)
         self.size = kwargs.pop("size", None)
@@ -670,6 +662,8 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 "accent": datasets.Value("string"),
                 "locale": datasets.Value("string"),
                 "segment": datasets.Value("string"),
+                "duration": datasets.Value("float32"),
+                "dataset": datasets.Value("string"),
             }
         )
 
@@ -681,6 +675,10 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
             license=_LICENSE,
             citation=_CITATION,
         )
+    
+    def _download_from_gdrive(self, src_url: str, dst_path: str):
+        """Downloading from Gdrive"""
+        gdown.download(src_url, dst_path, quiet=False)
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
@@ -688,13 +686,19 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
         abs_path_to_data = os.path.join(dl_path, "cv-corpus-6.1-2020-12-11", self.config.name)
         abs_path_to_clips = os.path.join(abs_path_to_data, "clips")
 
+        css10_dl_path = None
+        if self.config.name in _CSS10_URLS:
+            css10_url = _CSS10_URLS[self.config.name]
+            css10_dl_path = dl_manager.extract(dl_manager.download_custom(css10_url, self._download_from_gdrive))
+            css10_dl_path = os.path.join(css10_dl_path, self.config.name)
+
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "train.tsv"),
                     "path_to_clips": abs_path_to_clips,
-                    "preprocess": True
+                    "css10_dir": css10_dl_path
                 },
             ),
             datasets.SplitGenerator(
@@ -702,7 +706,7 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "test.tsv"),
                     "path_to_clips": abs_path_to_clips,
-                    "preprocess": True
+                    "css10_dir": None
                 },
             ),
             datasets.SplitGenerator(
@@ -710,73 +714,38 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "dev.tsv"),
                     "path_to_clips": abs_path_to_clips,
-                    "preprocess": True
+                    "css10_dir": None
                 },
-            ),
-            datasets.SplitGenerator(
-                name="other",
-                gen_kwargs={
-                    "filepath": os.path.join(abs_path_to_data, "other.tsv"),
-                    "path_to_clips": abs_path_to_clips,
-                    "preprocess": False
-                },
-            ),
-            datasets.SplitGenerator(
-                name="invalidated",
-                gen_kwargs={
-                    "filepath": os.path.join(abs_path_to_data, "invalidated.tsv"),
-                    "path_to_clips": abs_path_to_clips,
-                    "preprocess": False
-                },
-            ),
+            )
         ]
 
-    def _generate_examples(self, filepath, path_to_clips, preprocess):
-        """ Yields examples. """
+    def _convert_to_flac_and_save_it(self, path, delete_original_file=True):
+        """We'll convert all the audio files to FLAC format to speedup the loading"""
+        
+        sample_path, sample_extension = os.path.splitext(path)
+        new_path = f"{sample_path}.flac"
+
+        if not os.path.isfile(new_path):
+        
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                speech_array, sample_rate = librosa.load(path, sr=16_000)
+            
+            sf.write(new_path, speech_array, sample_rate)
+
+            if delete_original_file:
+                os.remove(path)
+
+        return new_path
+
+    def _common_voice_examples_generator(self, filepath, path_to_clips):
+
         data_fields = list(self._info().features.keys())
         path_idx = data_fields.index("path")
 
-        augmentator = Compose([
-            AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
-            Gain(min_gain_in_db=-1, max_gain_in_db=1, p=0.5),
-            # PitchShift(min_semitones=-2, max_semitones=2, p=0.5),
-            # TimeStretch(min_rate=0.7, max_rate=1.3, leave_length_unchanged=False, p=0.5),
-            # FrequencyMask(min_frequency_band=0.0, max_frequency_band=0.5, p=0.5),
-            # TimeMask(min_band_part=0.0, max_band_part=0.01, fade=True, p=0.5),
-            # ClippingDistortion(min_percentile_threshold=0, max_percentile_threshold=5, p=0.5),
-            # LoudnessNormalization(min_lufs_in_db=-31, max_lufs_in_db=-13, p=0.5)
-            # PolarityInversion(p=0.5),
-            # Shift(min_fraction=-0.01, max_fraction=0.01, rollover=False, p=0.5),
-            # AddGaussianSNR(min_SNR=0.001, max_SNR=1.0, p=0.5),
-            # Normalize(p=0.5),
-        ])
-
-        def _convert_to_flac_and_save_it(path):
-            """We'll convert all the audio files to FLAC format to speedup the loading (it will require about 2 more space in disk)"""
-            
-            sample_path, sample_extension = os.path.splitext(path)
-            new_path = f"{sample_path}.flac"
-
-            if not os.path.isfile(new_path):
-            
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    speech_array, sample_rate = librosa.load(path, sr=16_000)
-                
-                sf.write(new_path, speech_array, sample_rate)
-
-            return new_path
-
         with open(filepath, encoding="utf-8") as f:
             lines = f.readlines()
-            headline = lines[0]
 
-            column_names = headline.strip().split("\t")
-            assert (
-                column_names == data_fields
-            ), f"The file should have {data_fields} as column names, but has {column_names}"
-
-            id_ = 0
             for line in lines[1:]:
                 field_values = line.strip().split("\t")
 
@@ -789,53 +758,56 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
 
                 sample = {key: value for key, value in zip(data_fields, field_values)}
 
-                if preprocess:
-                    new_path = _convert_to_flac_and_save_it(sample.get("path"))
-                    sample["path"] = new_path
+                new_path = self._convert_to_flac_and_save_it(sample.get("path"))
+                speech_array, sampling_rate = sf.read(new_path)
+                sample["duration"] = len(speech_array) / sampling_rate
+                sample["path"] = new_path
+                sample["dataset"] = "common_voice"
 
-                    if self.config.unk_token_regex is not None:
-                        sample["sentence"] = re.sub(self.config.unk_token_regex, "<unk>", sample["sentence"])
+                if self.config.unk_token_regex is not None:
+                    sample["sentence"] = re.sub(self.config.unk_token_regex, "<unk>", sample["sentence"])
 
-                yield id_, sample
+                yield sample
 
-                id_ += 1
-                
-                if preprocess and self.config.augmentation_factor > 0:
+    def _css10_examples_generator(self, css10_dir):
 
-                    # loading audio file
-                    speech_array, sampling_rate = sf.read(sample.get("path"))
-                    
-                    for i in range(self.config.augmentation_factor):
+        with open(os.path.join(css10_dir, "transcript.txt"), encoding="utf-8") as f:
+            lines = f.readlines()
 
-                        # augmenting data
-                        speech_array_augmented = None
-                        while(speech_array_augmented is None):
-                            try:
-                                with warnings.catch_warnings():
-                                    warnings.simplefilter("ignore")
-                                    speech_array_augmented = augmentator(samples=speech_array, sample_rate=sampling_rate)
-                            except Exception as e:
-                                # some transformations can randomly fail on some parameters combination
-                                # we'll try again if this happen
-                                pass
+            for line in lines:
+                values = line.strip().split("|")
 
-                        # defining augmented data path
-                        sample_dir = os.path.dirname(sample.get("path"))
-                        sample_filename = os.path.basename(sample.get("path"))
-                        sample_name, sample_extension = os.path.splitext(sample_filename)
-                        augmented_sample_filename = f"{sample_name}_{i}{sample_extension}"
-                        augmented_sample_path = os.path.join(sample_dir, f"augmentation_factor={self.config.augmentation_factor}", augmented_sample_filename)
-                        
-                        # saving audio data to disk
-                        os.makedirs(os.path.dirname(augmented_sample_path), exist_ok=True)
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore")
-                            sf.write(augmented_sample_path, speech_array_augmented, sampling_rate)
+                audio_path = self._convert_to_flac_and_save_it(os.path.join(css10_dir, values[0]))
+                text = values[2]
+                duration = float(values[3])
 
-                        # updating augmented sample path
-                        augmented_sample = sample.copy()
-                        augmented_sample["path"] = augmented_sample_path
+                if self.config.unk_token_regex is not None:
+                    text = re.sub(self.config.unk_token_regex, "<unk>", text)
 
-                        yield id_, augmented_sample
+                yield {
+                    "client_id": None,
+                    "path": audio_path,
+                    "sentence": text,
+                    "up_votes": 0,
+                    "down_votes": 0,
+                    "age": None,
+                    "gender": None,
+                    "accent": None,
+                    "locale": None,
+                    "segment": None,
+                    "duration": duration,
+                    "dataset": "css10"
+                }
 
-                        id_ += 1
+    def _generate_examples(self, filepath, path_to_clips, css10_dir):
+        """ Yields examples. """
+        _id = 0
+
+        for example in self._common_voice_examples_generator(filepath, path_to_clips):
+            yield _id, example
+            _id += 1
+
+        if css10_dir is not None:
+            for example in self._css10_examples_generator(css10_dir):
+                yield _id, example
+                _id += 1

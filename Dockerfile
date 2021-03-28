@@ -13,6 +13,8 @@ RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.d
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     python3 -m pip install --no-cache-dir \
+    torch==1.8.1 \
+    torchaudio==0.8.1 \
     datasets==1.5.0 \
     jiwer==2.2.0 \
     soundfile==0.10.3.post1 \
@@ -32,7 +34,7 @@ RUN pip3 install git+https://github.com/huggingface/transformers.git
 
 RUN mkdir -p /workspace/wav2vec/
 
-COPY finetune.sh run_common_voice.py common_voice_ext.py finetune_with_params.sh /workspace/wav2vec/
+COPY finetune.sh run_common_voice.py dataset_ext.py finetune_with_params.sh /workspace/wav2vec/
 
 COPY home-server.html run_all.sh /usr/bin/
 

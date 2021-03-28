@@ -1,4 +1,5 @@
 torch==1.8.1
+torchaudio==0.8.1
 datasets==1.5.0
 jiwer==2.2.0
 soundfile==0.10.3.post1
@@ -8,6 +9,7 @@ samplerate==0.1.0
 git+https://github.com/huggingface/transformers.git
 scipy==1.5.4
 audiomentations==0.16.0
+torch-audiomentations==0.6.0
 pyloudnorm==0.1.0
 wandb==0.10.23
 homoglyphs==2.0.4

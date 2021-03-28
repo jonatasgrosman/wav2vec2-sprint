@@ -17,6 +17,8 @@ from torch import nn
 from pathlib import Path
 import wandb
 
+from torch_audiomentations import Compose, Gain
+
 import transformers
 from transformers import (
     HfArgumentParser,
@@ -69,6 +71,10 @@ class AdditionalTrainingArguments:
     upload_model_to_wandb_each_step: Optional[int] = field(
         default=None,
         metadata={"help": "Frequency (in steps) to upload the trained model to the WandB artifacts repository"},
+    )
+    apply_audio_transformations: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether to apply audio transformations on the original samples before each traning foward pass"},
     )
 
 
@@ -165,12 +171,6 @@ class DataTrainingArguments:
         default=[",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�", "·", "჻", "¿", "¡", "~", "՞", "؟", "،", "।", "॥", "«", "»", "„", "“", "”", "「", "」", "‘", "’", "《", "》"],
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
-    augmentation_factor: Optional[int] = field(
-        default=0,
-        metadata={
-            "help": "How much augmented samples each training sample should generate, default is 0 (no augmentation)"
-        },
-    )
     min_duration: Optional[float] = field(
         default=0.0,
         metadata={
@@ -250,14 +250,23 @@ class DataCollatorCTCWithPadding:
 
 class CTCTrainer(Trainer):
 
-    def __init__(self, model_output_dir, length_field_name="length", upload_model_to_wandb_each_step=None, lr_warmup_ratio=0.1, lr_constant_ratio=0.4, **kwargs):
+    def __init__(self, model_output_dir, length_field_name="length", upload_model_to_wandb_each_step=None, lr_warmup_ratio=0.1, 
+                lr_constant_ratio=0.4, sampling_rate=16_000, apply_audio_transformations=False, **kwargs):
         super().__init__(**kwargs)
         self.model_output_dir = model_output_dir
         self.length_field_name = length_field_name
         self.upload_model_to_wandb_each_step = upload_model_to_wandb_each_step
         self.lr_warmup_ratio = lr_warmup_ratio
         self.lr_constant_ratio = lr_constant_ratio
-        self.length_field_name = length_field_name
+        self.sampling_rate = sampling_rate
+        self.apply_audio_transformations = apply_audio_transformations
+
+        if self.apply_audio_transformations:
+            self.augmentator = Compose(
+                transforms=[
+                    Gain(min_gain_in_db=-1, max_gain_in_db=1, p=0.5),
+                ]
+            )
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset) or not isinstance(
@@ -311,6 +320,22 @@ class CTCTrainer(Trainer):
         
         self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)
 
+    def _apply_some_audio_transformations(self, inputs):
+        """Perform some audio transformations"""
+        
+        # adding an extra dimmention for the channels as our data is mono audio and
+        # the expected shape of input for torch_audiomentations is (batch_size, num_channels, num_samples)
+        transformed_inputs = inputs["input_values"].unsqueeze(1)
+
+        transformed_inputs = self.augmentator(transformed_inputs, sample_rate=self.sampling_rate)
+           
+        # returning the inputs to the original shape
+        transformed_inputs = torch.squeeze(transformed_inputs, 1)
+        
+        inputs["input_values"] = transformed_inputs
+
+        return inputs
+
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
@@ -332,6 +357,9 @@ class CTCTrainer(Trainer):
 
         model.train()
         inputs = self._prepare_inputs(inputs)
+
+        if self.apply_audio_transformations:
+            inputs = self._apply_some_audio_transformations(inputs)
 
         if self.use_amp:
             with autocast():
@@ -379,16 +407,14 @@ def build_tokenizer(model_output_dir, train_dataset, eval_dataset, num_proc):
         batched=True,
         batch_size=-1,
         remove_columns=train_dataset.column_names,
-        num_proc=num_proc,
-        keep_in_memory=True
+        num_proc=num_proc
     )
     vocab_test = eval_dataset.map(
         extract_all_chars,
         batched=True,
         batch_size=-1,
         remove_columns=eval_dataset.column_names,
-        num_proc=num_proc,
-        keep_in_memory=True
+        num_proc=num_proc
     )
 
     vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
@@ -475,18 +501,14 @@ def main():
 
     # Get the datasets:
     train_dataset = datasets.load_dataset(
-        "common_voice_ext.py", data_args.dataset_config_name, 
-        augmentation_factor=data_args.augmentation_factor, 
+        "dataset_ext.py", data_args.dataset_config_name, 
         split=data_args.train_split_name, 
-        cache_dir=model_args.cache_dir,
-        keep_in_memory=True
+        cache_dir=model_args.cache_dir
     )
     eval_dataset = datasets.load_dataset(
-        "common_voice_ext.py", data_args.dataset_config_name,
-        augmentation_factor=0,
+        "dataset_ext.py", data_args.dataset_config_name,
         split="test", 
-        cache_dir=model_args.cache_dir,
-        keep_in_memory=True
+        cache_dir=model_args.cache_dir
     )
 
     # Create and save tokenizer
@@ -499,14 +521,12 @@ def main():
     train_dataset = train_dataset.map(
         remove_special_characters,
         remove_columns=["sentence"], 
-        num_proc=data_args.preprocessing_num_workers,
-        keep_in_memory=True
+        num_proc=data_args.preprocessing_num_workers
     )
     eval_dataset = eval_dataset.map(
         remove_special_characters, 
         remove_columns=["sentence"], 
-        num_proc=data_args.preprocessing_num_workers,
-        keep_in_memory=True
+        num_proc=data_args.preprocessing_num_workers
     )
     
     # Load pretrained model and tokenizer
@@ -540,11 +560,25 @@ def main():
         ctc_zero_infinity=True
     )
 
+    
+    # filtering training dataset
+    
+    train_dataset_original_size = len(train_dataset)
+
     if data_args.max_train_samples is not None:
-        train_dataset = train_dataset.select(range(data_args.max_train_samples), keep_in_memory=True)
+        train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
     if data_args.max_val_samples is not None:
-        eval_dataset = eval_dataset.select(range(data_args.max_val_samples), keep_in_memory=True)
+        eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+
+    train_dataset = train_dataset.filter(
+        lambda example: example['duration'] >= data_args.min_duration and example['duration'] <= data_args.max_duration,
+        num_proc=data_args.preprocessing_num_workers
+    )
+
+    train_dataset_final_size = len(train_dataset)
+    
+    logger.info(f"After filtering {train_dataset_final_size} of {train_dataset_original_size} samples will be used to train the model")
 
     # Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
@@ -552,29 +586,18 @@ def main():
         speech_array, sampling_rate = sf.read(batch["path"])
         batch["speech"] = speech_array
         batch["sampling_rate"] = sampling_rate
-        batch["duration"] = len(speech_array) / sampling_rate
         batch["target_text"] = batch["text"]
-
         return batch
 
     train_dataset = train_dataset.map(
         speech_file_to_array_fn,
         remove_columns=train_dataset.column_names,
-        num_proc=data_args.preprocessing_num_workers,
-        keep_in_memory=True
+        num_proc=data_args.preprocessing_num_workers
     )
     eval_dataset = eval_dataset.map(
         speech_file_to_array_fn,
         remove_columns=eval_dataset.column_names,
-        num_proc=data_args.preprocessing_num_workers,
-        keep_in_memory=True
-    )
-
-    # filtering training dataset
-    train_dataset = train_dataset.filter(
-        lambda example: example['duration'] >= data_args.min_duration and example['duration'] <= data_args.max_duration,
-        num_proc=data_args.preprocessing_num_workers,
-        keep_in_memory=True
+        num_proc=data_args.preprocessing_num_workers
     )
 
     def prepare_dataset(batch):
@@ -594,16 +617,14 @@ def main():
         remove_columns=train_dataset.column_names,
         batch_size=training_args.per_device_train_batch_size,
         batched=True,
-        num_proc=data_args.preprocessing_num_workers,
-        keep_in_memory=True
+        num_proc=data_args.preprocessing_num_workers
     )
     eval_dataset = eval_dataset.map(
         prepare_dataset,
         remove_columns=eval_dataset.column_names,
         batch_size=training_args.per_device_train_batch_size,
         batched=True,
-        num_proc=data_args.preprocessing_num_workers,
-        keep_in_memory=True
+        num_proc=data_args.preprocessing_num_workers
     )
 
     # Pre-compute sample lengths
@@ -613,8 +634,7 @@ def main():
 
     train_dataset = train_dataset.map(
         input_lengths,
-        num_proc=data_args.preprocessing_num_workers,
-        keep_in_memory=True
+        num_proc=data_args.preprocessing_num_workers
     )
 
     # Metric
@@ -647,6 +667,8 @@ def main():
         upload_model_to_wandb_each_step=additional_training_args.upload_model_to_wandb_each_step,
         lr_warmup_ratio=additional_training_args.lr_warmup_ratio, 
         lr_constant_ratio=additional_training_args.lr_constant_ratio,
+        apply_audio_transformations=additional_training_args.apply_audio_transformations,
+        sampling_rate=16_000,
         model=model,
         data_collator=data_collator,
         args=training_args,
