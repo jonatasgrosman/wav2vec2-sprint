@@ -453,7 +453,6 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
     # override default run name
-    wandb.init()
 
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, AdditionalTrainingArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
@@ -464,6 +463,8 @@ def main():
         model_args, data_args, additional_training_args, training_args = parser.parse_args_into_dataclasses()
 
     os.makedirs(training_args.output_dir, exist_ok=True)
+    
+    wandb.init(dir=model_args.cache_dir)
 
     # Detecting last checkpoint.
     last_checkpoint = None
