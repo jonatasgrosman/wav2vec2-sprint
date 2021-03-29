@@ -55,6 +55,7 @@ model = Wav2Vec2ForCTC.from_pretrained(MODEL_ID)
 def speech_file_to_array_fn(batch):
     speech_array, sampling_rate = librosa.load(batch["path"], sr=16_000)
     batch["speech"] = speech_array
+    batch["sentence"] = batch["sentence"].upper()
     return batch
 
 test_dataset = test_dataset.map(speech_file_to_array_fn)
