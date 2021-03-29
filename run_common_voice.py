@@ -515,7 +515,7 @@ def main():
     )
 
     # Create and save tokenizer
-    chars_to_ignore_regex = f'[{re.escape("".join(data_args.chars_to_ignore))}]'
+    chars_to_ignore_regex = f"[{re.escape(''.join(data_args.chars_to_ignore))}]"
 
     def remove_special_characters(batch):
         batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).upper() + " "

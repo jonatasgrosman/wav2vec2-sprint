@@ -92,7 +92,7 @@ CHARS_TO_IGNORE = [",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�"
 test_dataset = load_dataset("common_voice", LANG_ID, split="test")
 wer = load_metric("wer")
 
-chars_to_ignore_regex = f"[{re.escape("".join(CHARS_TO_IGNORE))}]"
+chars_to_ignore_regex = f"[{re.escape(''.join(CHARS_TO_IGNORE))}]"
 
 processor = Wav2Vec2Processor.from_pretrained(MODEL_ID)
 model = Wav2Vec2ForCTC.from_pretrained(MODEL_ID)
