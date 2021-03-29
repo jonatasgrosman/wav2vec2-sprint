@@ -1,11 +1,11 @@
 import torch
+import librosa
+import re
 from datasets import load_dataset, load_metric
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
-import re
-import librosa
 
-LANG_ID = "fi"
-MODEL_ID = "jonatasgrosman/wav2vec2-large-xlsr-53-finnish"
+LANG_ID = "pt"
+MODEL_ID = "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese"
 DEVICE = "cuda"
 
 CHARS_TO_IGNORE = [",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�", "ʿ", "·", "჻", "¿", "¡", "~", "՞", 
@@ -15,7 +15,7 @@ CHARS_TO_IGNORE = [",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�"
 test_dataset = load_dataset("common_voice", LANG_ID, split="test")
 wer = load_metric("wer")
 
-chars_to_ignore_regex = f'[{re.escape("".join(CHARS_TO_IGNORE))}]'
+chars_to_ignore_regex = f"[{re.escape("".join(CHARS_TO_IGNORE))}]"
 
 processor = Wav2Vec2Processor.from_pretrained(MODEL_ID)
 model = Wav2Vec2ForCTC.from_pretrained(MODEL_ID)
@@ -24,7 +24,7 @@ model.to(DEVICE)
 # Preprocessing the datasets.
 # We need to read the audio files as arrays
 def speech_file_to_array_fn(batch):
-    batch["sentence"] = re.sub(chars_to_ignore_regex, '', batch["sentence"]).upper()
+    batch["sentence"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).upper()
     speech_array, sampling_rate = librosa.load(batch["path"], sr=16_000)
     batch["speech"] = speech_array
     return batch
@@ -43,6 +43,6 @@ def evaluate(batch):
 	batch["pred_strings"] = processor.batch_decode(pred_ids)
 	return batch
 
-result = test_dataset.map(evaluate, batched=True, batch_size=8)
+result = test_dataset.map(evaluate, batched=True, batch_size=32)
 
 print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"])))

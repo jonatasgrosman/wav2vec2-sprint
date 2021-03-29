@@ -76,9 +76,10 @@ The model can be evaluated as follows on the Portuguese test data of Common Voic
 
 ```python
 import torch
+import librosa
+import re
 from datasets import load_dataset, load_metric
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
-import re
 
 LANG_ID = "pt"
 MODEL_ID = "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese"
