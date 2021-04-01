@@ -89,7 +89,7 @@ LANG_ID = "pt"
 MODEL_ID = "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese"
 DEVICE = "cuda"
 
-CHARS_TO_IGNORE = [",", "?", "¿", ".", "!", "¡", "-", ";", ":", '""', "%", "'", '"', "�", "ʿ", "·", "჻", "~", "՞", 
+CHARS_TO_IGNORE = [",", "?", "¿", ".", "!", "¡", "-", ";", ":", '""', "%", '"', "�", "ʿ", "·", "჻", "~", "՞", 
                    "؟", "،", "।", "॥", "«", "»", "„", "“", "”", "「", "」", "‘", "’", "《", "》", "(", ")", "[", "]",
                    "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→", "。"]
 
@@ -131,4 +131,8 @@ print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], 
 print("CER: {:2f}".format(100 * cer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=8000)))
 ```
 
-**Test Result**: XX.XX %  # TODO: write output of print here.
+**Test Result**: 
+
+- WER: XX.XX%
+
+- CER: XX.XX%
