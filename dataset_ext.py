@@ -592,11 +592,16 @@ _LANGUAGES = {
 }
 
 _CSS10_URLS = {
-    "el": "https://drive.google.com/uc?id=1BdYXzE8ffanCtyrTxYK1TJ9k8-LpvQcn",
-    "fi": "https://drive.google.com/uc?id=16S_p6NAHHdD50nwysIEl1uEo-z3s8xf1",
-    "hu": "https://drive.google.com/uc?id=1XspdS3ojsOqBMKr_3iKxIcwtSmI41Wd3",
-    "ja": "https://drive.google.com/uc?id=1WXwqYDL5n2WzBXwI0UjbmBTX6h1wXRgx",
-    "nl": "https://drive.google.com/uc?id=1iW_smYD4Pb2iI8kGSIJgByKPNwwy1cX2",
+    "de": "https://drive.google.com/uc?id=1wgCHGvT0S8YrNfRTVyn23sW-5MFknoHA",
+    "el": "https://drive.google.com/uc?id=10BNORyOqkosxEf3qAAtWM1qWjHEZzXTO",
+    "es": "https://drive.google.com/uc?id=1dyUvSxv0KowTseI35dE8UXpVsYFhEpQV",
+    "fi": "https://drive.google.com/uc?id=1H4-eGIgf4aK_s14uo-srbKMENpysuV2u",
+    "fr": "https://drive.google.com/uc?id=1kuhoDjhA_Cij0SJuMI_4kneDTR_cqahS",
+    "hu": "https://drive.google.com/uc?id=1ms2INJ1e0ChU0TMzgDYLa8jtoTK2gkmE",
+    "ja": "https://drive.google.com/uc?id=1E4k8FduAk-_wy85AQrGakZBcw2hLhmU6",
+    "nl": "https://drive.google.com/uc?id=1ji8QD4lJzInz2vomGkMafRjpz3gGBYsf",
+    "ru": "https://drive.google.com/uc?id=1tx3dpO8SX8CriF0YsK8XeISZc9yGRody",
+    "zh-CN": "https://drive.google.com/uc?id=1hliY4KD_I8y4FQg5zta9IDGN0HRQLRiv",
 }
 
 class CommonVoiceConfig(datasets.BuilderConfig):
@@ -778,7 +783,7 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 values = line.strip().split("|")
 
                 audio_path = self._convert_to_flac_and_save_it(os.path.join(css10_dir, values[0]))
-                text = values[2]
+                text = values[1] if self.config.name in ["ja", "zh"] else values[2]
                 duration = float(values[3])
 
                 if self.config.unk_token_regex is not None:
