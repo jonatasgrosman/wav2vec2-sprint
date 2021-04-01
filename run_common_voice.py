@@ -458,12 +458,12 @@ def build_tokenizer(model_output_dir, train_dataset, eval_dataset, num_proc):
     special_vocab_dict = {"<pad>": 0, "<s>": 1, "</s>": 2, "<unk>": 3, "|": 4}
 
     vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
-    vocab_dict = {v: k + len(special_vocab_dict) for k, v in enumerate(vocab_list) if v != " "}
+    vocab_dict = {str(v): k + len(special_vocab_dict) for k, v in enumerate(vocab_list) if v != " "}
     vocab_dict.update(special_vocab_dict)
     
     vocab_path = os.path.join(model_output_dir, "vocab.json")
 
-    with open(vocab_path, "w") as vocab_file:
+    with open(vocab_path, "w", encoding="utf-8") as vocab_file:
         json.dump(vocab_dict, vocab_file)
 
     return Wav2Vec2CTCTokenizer(
