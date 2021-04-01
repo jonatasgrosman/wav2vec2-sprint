@@ -695,7 +695,6 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
         if self.config.name in _CSS10_URLS:
             css10_url = _CSS10_URLS[self.config.name]
             css10_dl_path = dl_manager.extract(dl_manager.download_custom(css10_url, self._download_from_gdrive))
-            css10_dl_path = os.path.join(css10_dl_path, self.config.name)
 
         return [
             datasets.SplitGenerator(
