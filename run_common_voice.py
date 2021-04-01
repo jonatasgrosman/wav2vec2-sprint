@@ -18,6 +18,21 @@ from pathlib import Path
 import wandb
 
 from torch_audiomentations import Compose, Gain
+from audiomentations import (
+    Compose,
+    AddGaussianNoise,
+    AddGaussianSNR,
+    ClippingDistortion,
+    FrequencyMask,
+    Gain,
+    LoudnessNormalization,
+    Normalize,
+    PitchShift,
+    PolarityInversion,
+    Shift,
+    TimeMask,
+    TimeStretch,
+)
 
 import transformers
 from transformers import (
@@ -72,9 +87,17 @@ class AdditionalTrainingArguments:
         default=None,
         metadata={"help": "Frequency (in steps) to upload the trained model to the WandB artifacts repository"},
     )
-    apply_audio_transformations: Optional[bool] = field(
-        default=False,
-        metadata={"help": "Whether to apply audio transformations on the original samples before each traning foward pass"},
+    apply_gaussian_noise_with_p: Optional[float] = field(
+        default=0.5,
+        metadata={"help": "Probability to apply Gaussian Noise in the original samples"},
+    )
+    apply_gain_with_p: Optional[float] = field(
+        default=0.5,
+        metadata={"help": "Probability to apply Gain in the original samples"},
+    )
+    apply_pitch_shift_p: Optional[float] = field(
+        default=0.5,
+        metadata={"help": "Probability to apply Pitch Shift in the original samples"},
     )
 
 
@@ -170,7 +193,7 @@ class DataTrainingArguments:
     chars_to_ignore: List[str] = list_field(
         default=[",", "?", "¿", ".", "!", "¡", "-", ";", ":", '""', "%", "'", '"', "�", "ʿ", "·", "჻", "~", "՞", 
                  "؟", "،", "।", "॥", "«", "»", "„", "“", "”", "「", "」", "‘", "’", "《", "》", "(", ")", "[", "]",
-                 "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→"],
+                 "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→", "。"],
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
     min_duration: Optional[float] = field(
@@ -220,10 +243,34 @@ class DataCollatorCTCWithPadding:
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
 
+    def __init__(self, processor, padding=True, apply_gaussian_noise_with_p=0.5, apply_gain_with_p=0.5, apply_pitch_shift_p=0.5, sample_rate=16_000):
+        self.processor = processor
+        self.padding = padding
+        self.apply_gaussian_noise_with_p = apply_gaussian_noise_with_p
+        self.apply_gain_with_p = apply_gain_with_p
+        self.apply_pitch_shift_p = apply_pitch_shift_p
+        self.sample_rate = sample_rate
+
+        self.augmentator = None
+        if self.apply_gaussian_noise_with_p > 0 or self.apply_gain_with_p > 0 or self.apply_pitch_shift_p > 0:
+            self.augmentator = Compose([
+                PitchShift(min_semitones=-1, max_semitones=1, p=self.apply_pitch_shift_p),
+                Gain(min_gain_in_db=-1, max_gain_in_db=1, p=self.apply_gain_with_p),
+                AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.001, p=self.apply_gaussian_noise_with_p),
+            ])
+
+    def _apply_augmentation(self, input_values: List[float]):
+        """apply some audio augmentations in the given input_values"""
+        if self.augmentator is not None:
+            return self.augmentator(samples=np.array(input_values), sample_rate=self.sample_rate).tolist()
+        else:
+            return input_values
+
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lenghts and need
         # different padding methods
-        input_features = [{"input_values": feature["input_values"]} for feature in features]
+
+        input_features = [{"input_values": self._apply_augmentation(feature["input_values"])} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
         batch = self.processor.pad(
@@ -253,7 +300,7 @@ class DataCollatorCTCWithPadding:
 class CTCTrainer(Trainer):
 
     def __init__(self, model_output_dir, length_field_name="length", upload_model_to_wandb_each_step=None, lr_warmup_ratio=0.1, 
-                lr_constant_ratio=0.4, sampling_rate=16_000, apply_audio_transformations=False, **kwargs):
+                lr_constant_ratio=0.4, sampling_rate=16_000, **kwargs):
         super().__init__(**kwargs)
         self.model_output_dir = model_output_dir
         self.length_field_name = length_field_name
@@ -261,14 +308,6 @@ class CTCTrainer(Trainer):
         self.lr_warmup_ratio = lr_warmup_ratio
         self.lr_constant_ratio = lr_constant_ratio
         self.sampling_rate = sampling_rate
-        self.apply_audio_transformations = apply_audio_transformations
-
-        if self.apply_audio_transformations:
-            self.augmentator = Compose(
-                transforms=[
-                    Gain(min_gain_in_db=-1, max_gain_in_db=1, p=0.5),
-                ]
-            )
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset) or not isinstance(
@@ -359,9 +398,6 @@ class CTCTrainer(Trainer):
 
         model.train()
         inputs = self._prepare_inputs(inputs)
-
-        if self.apply_audio_transformations:
-            inputs = self._apply_some_audio_transformations(inputs)
 
         if self.use_amp:
             with autocast():
@@ -642,6 +678,7 @@ def main():
 
     # Metric
     wer_metric = datasets.load_metric("wer")
+    cer_metric = datasets.load_metric("./cer")
 
     def compute_metrics(pred):
         pred_logits = pred.predictions
@@ -654,14 +691,22 @@ def main():
         label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
 
         wer = wer_metric.compute(predictions=pred_str, references=label_str)
+        cer = cer_metric.compute(predictions=pred_str, references=label_str)
 
-        return {"wer": wer}
+        return {"wer": wer, "cer": cer}
 
     if model_args.freeze_feature_extractor:
         model.freeze_feature_extractor()
 
     # Data collator
-    data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+    data_collator = DataCollatorCTCWithPadding(
+        processor=processor,
+        padding=True,
+        apply_gaussian_noise_with_p=additional_training_args.apply_gaussian_noise_with_p, 
+        apply_gain_with_p=additional_training_args.apply_gain_with_p, 
+        apply_pitch_shift_p=additional_training_args.apply_pitch_shift_p, 
+        sample_rate=16_000,
+    )
 
     # Initialize our Trainer
     trainer = CTCTrainer(
@@ -670,7 +715,6 @@ def main():
         upload_model_to_wandb_each_step=additional_training_args.upload_model_to_wandb_each_step,
         lr_warmup_ratio=additional_training_args.lr_warmup_ratio, 
         lr_constant_ratio=additional_training_args.lr_constant_ratio,
-        apply_audio_transformations=additional_training_args.apply_audio_transformations,
         sampling_rate=16_000,
         model=model,
         data_collator=data_collator,
