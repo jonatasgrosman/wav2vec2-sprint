@@ -48,8 +48,9 @@ from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
 LANG_ID = "pt"
 MODEL_ID = "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese"
+SAMPLES = 5
 
-test_dataset = load_dataset("common_voice", LANG_ID, split="test[:2%]")
+test_dataset = load_dataset("common_voice", LANG_ID, split=f"test[:{SAMPLES}]")
 
 processor = Wav2Vec2Processor.from_pretrained(MODEL_ID)
 model = Wav2Vec2ForCTC.from_pretrained(MODEL_ID)
@@ -63,16 +64,28 @@ def speech_file_to_array_fn(batch):
     return batch
 
 test_dataset = test_dataset.map(speech_file_to_array_fn)
-inputs = processor(test_dataset[:2]["speech"], sampling_rate=16_000, return_tensors="pt", padding=True)
+inputs = processor(test_dataset["speech"], sampling_rate=16_000, return_tensors="pt", padding=True)
 
 with torch.no_grad():
     logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
 
 predicted_ids = torch.argmax(logits, dim=-1)
+predicted_sentences = processor.batch_decode(predicted_ids)
 
-print("Prediction:", processor.batch_decode(predicted_ids))
-print("Reference:", test_dataset[:2]["sentence"])
+for i, predicted_sentence in enumerate(predicted_sentences):
+    print("-" * 100)
+    print("Reference:", test_dataset[i]["sentence"])
+    print("Prediction:", predicted_sentence)
 ```
+
+| Reference  | Prediction |
+| ------------- | ------------- |
+| NEM O RADAR NEM OS OUTROS INSTRUMENTOS DETECTARAM O BOMBARDEIRO STEALTH. | NEM UM VADA ME OS OUTOS INSTRUMENTOS DE TETERAM UM BAMBEDER OSTAU |
+| PEDIR DINHEIRO EMPRESTADO ÀS PESSOAS DA ALDEIA | PEDIAR DINHEIRO EMPRESTADO DÀS PESSOAS DA ALDEIA |
+| PEDIR DINHEIRO EMPRESTADO ÀS PESSOAS DA ALDEIA | PEDIAR DINHEIRO EMPRESTADO DÀS PESSOAS DA ALDEIA |
+| OITO | OITO |
+| TRANCÁ-LOS | TRAM CALDOS |
+| REALIZAR UMA INVESTIGAÇÃO PARA RESOLVER O PROBLEMA | REALIZARAMA INVESTIGAÇÃO PARA RESOLVER O PROBLEMA |
 
 ## Evaluation
 
@@ -134,5 +147,4 @@ print("CER: {:2f}".format(100 * cer.compute(predictions=result["pred_strings"], 
 **Test Result**: 
 
 - WER: XX.XX%
-
 - CER: XX.XX%
