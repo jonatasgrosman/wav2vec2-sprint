@@ -1,6 +1,7 @@
 import torch
 import librosa
 import re
+import warnings
 from datasets import load_dataset, load_metric
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
@@ -25,9 +26,11 @@ model.to(DEVICE)
 # Preprocessing the datasets.
 # We need to read the audio files as arrays
 def speech_file_to_array_fn(batch):
-    batch["sentence"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).upper()
-    speech_array, sampling_rate = librosa.load(batch["path"], sr=16_000)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        speech_array, sampling_rate = librosa.load(batch["path"], sr=16_000)
     batch["speech"] = speech_array
+    batch["sentence"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).upper()
     return batch
 
 test_dataset = test_dataset.map(speech_file_to_array_fn)
