@@ -4,6 +4,7 @@ datasets:
 - common_voice
 metrics:
 - wer
+- cer
 tags:
 - audio
 - automatic-speech-recognition
@@ -21,9 +22,12 @@ model-index:
       type: common_voice
       args: pt
     metrics:
-       - name: Test WER
+      - name: Test WER
          type: wer
-         value: {wer_result_on_test} #TODO (IMPORTANT): replace {wer_result_on_test} with the WER error rate you achieved on the common_voice test set. It should be in the format XX.XX (don't add the % sign here). **Please** remember to fill out this value after you evaluated your model, so that your model appears on the leaderboard. If you fill out this model card before evaluating your model, please remember to edit the model card afterward to fill in your value
+         value: {wer_result_on_test}
+       - name: Test CER
+         type: cer
+         value: {cer_result_on_test} #TODO (IMPORTANT): replace {wer_result_on_test} with the WER error rate you achieved on the common_voice test set. It should be in the format XX.XX (don't add the % sign here). **Please** remember to fill out this value after you evaluated your model, so that your model appears on the leaderboard. If you fill out this model card before evaluating your model, please remember to edit the model card afterward to fill in your value
 ---
 
 # Wav2Vec2-Large-XLSR-53-Portuguese
@@ -87,10 +91,11 @@ DEVICE = "cuda"
 
 CHARS_TO_IGNORE = [",", "?", "¿", ".", "!", "¡", "-", ";", ":", '""', "%", "'", '"', "�", "ʿ", "·", "჻", "~", "՞", 
                    "؟", "،", "।", "॥", "«", "»", "„", "“", "”", "「", "」", "‘", "’", "《", "》", "(", ")", "[", "]",
-                   "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→"]
+                   "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→", "。"]
 
 test_dataset = load_dataset("common_voice", LANG_ID, split="test")
-wer = load_metric("wer")
+wer = load_metric("wer") # https://github.com/jonatasgrosman/wav2vec2-sprint/blob/main/wer.py
+cer = load_metric("cer") # https://github.com/jonatasgrosman/wav2vec2-sprint/blob/main/cer.py
 
 chars_to_ignore_regex = f"[{re.escape(''.join(CHARS_TO_IGNORE))}]"
 
@@ -122,7 +127,8 @@ def evaluate(batch):
 
 result = test_dataset.map(evaluate, batched=True, batch_size=32)
 
-print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"])))
+print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=8000)))
+print("CER: {:2f}".format(100 * cer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=8000)))
 ```
 
 **Test Result**: XX.XX %  # TODO: write output of print here.

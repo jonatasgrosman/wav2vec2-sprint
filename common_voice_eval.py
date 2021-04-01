@@ -13,8 +13,8 @@ CHARS_TO_IGNORE = [",", "?", "¿", ".", "!", "¡", "-", ";", ":", '""', "%", "'"
                    "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→", "。"]
 
 test_dataset = load_dataset("common_voice", LANG_ID, split="test")
-wer = load_metric("wer")
-cer = load_metric("./cer") # get it from https://github.com/jonatasgrosman/wav2vec2-sprint/blob/main/cer.py
+wer = load_metric("wer.py") # https://github.com/jonatasgrosman/wav2vec2-sprint/blob/main/wer.py
+cer = load_metric("cer.py") # https://github.com/jonatasgrosman/wav2vec2-sprint/blob/main/cer.py
 
 chars_to_ignore_regex = f"[{re.escape(''.join(CHARS_TO_IGNORE))}]"
 
@@ -44,7 +44,7 @@ def evaluate(batch):
 	batch["pred_strings"] = processor.batch_decode(pred_ids)
 	return batch
 
-result = test_dataset.map(evaluate, batched=True, batch_size=32)
+result = test_dataset.map(evaluate, batched=True, batch_size=8)
 
-print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"])))
-print("CER: {:2f}".format(100 * cer.compute(predictions=result["pred_strings"], references=result["sentence"])))
+print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=8000)))
+print("CER: {:2f}".format(100 * cer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=8000)))

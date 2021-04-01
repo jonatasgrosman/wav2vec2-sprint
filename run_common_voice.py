@@ -677,8 +677,8 @@ def main():
     )
 
     # Metric
-    wer_metric = datasets.load_metric("wer")
-    cer_metric = datasets.load_metric("./cer")
+    wer_metric = datasets.load_metric("wer.py")
+    cer_metric = datasets.load_metric("cer.py")
 
     def compute_metrics(pred):
         pred_logits = pred.predictions
@@ -690,8 +690,8 @@ def main():
         # we do not want to group tokens when computing the metrics
         label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
 
-        wer = wer_metric.compute(predictions=pred_str, references=label_str)
-        cer = cer_metric.compute(predictions=pred_str, references=label_str)
+        wer = wer_metric.compute(predictions=pred_str, references=label_str, chunk_size=8000)
+        cer = cer_metric.compute(predictions=pred_str, references=label_str, chunk_size=8000)
 
         return {"wer": wer, "cer": cer}
 

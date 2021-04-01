@@ -12,10 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Character Error Ratio (CER) metric. """
+""" Word Error Ratio (WER) metric. """
+
 import jiwer
-import jiwer.transforms as tr
-from typing import List
 import datasets
 
 _CITATION = """\
@@ -27,37 +26,42 @@ _CITATION = """\
     title = {From WER and RIL to MER and WIL: improved evaluation measures for connected speech recognition.}
 }
 """
+
 _DESCRIPTION = """\
-Character error rate (CER) is a common metric of the performance of an automatic speech recognition system.
-CER is similar to Word Error Rate (WER), but operate on character insted of word. Please refer to docs of WER for further information.
-Character error rate can be computed as:
-CER = (S + D + I) / N = (S + D + I) / (S + D + C)
+Word error rate (WER) is a common metric of the performance of an automatic speech recognition system.
+The general difficulty of measuring performance lies in the fact that the recognized word sequence can have a different length from the reference word sequence (supposedly the correct one). The WER is derived from the Levenshtein distance, working at the word level instead of the phoneme level. The WER is a valuable tool for comparing different systems as well as for evaluating improvements within one system. This kind of measurement, however, provides no details on the nature of translation errors and further work is therefore required to identify the main source(s) of error and to focus any research effort.
+This problem is solved by first aligning the recognized word sequence with the reference (spoken) word sequence using dynamic string alignment. Examination of this issue is seen through a theory called the power law that states the correlation between perplexity and word error rate.
+Word error rate can then be computed as:
+WER = (S + D + I) / N = (S + D + I) / (S + D + C)
 where
 S is the number of substitutions,
 D is the number of deletions,
 I is the number of insertions,
-C is the number of correct characters,
-N is the number of characters in the reference (N=S+D+C).
-CER's output is always a number between 0 and 1. This value indicates the percentage of characters that were incorrectly predicted. The lower the value, the better the
-performance of the ASR system with a CER of 0 being a perfect score.
+C is the number of correct words,
+N is the number of words in the reference (N=S+D+C).
+WER's output is always a number between 0 and 1. This value indicates the percentage of words that were incorrectly predicted. The lower the value, the better the
+performance of the ASR system with a WER of 0 being a perfect score.
 """
+
 _KWARGS_DESCRIPTION = """
-Computes CER score of transcribed segments against references.
+Computes WER score of transcribed segments against references.
 Args:
     references: list of references for each speech input.
     predictions: list of transcribtions to score.
 Returns:
-    (float): the character error rate
+    (float): the word error rate
 Examples:
     >>> predictions = ["this is the prediction", "there is an other sample"]
     >>> references = ["this is the reference", "there is another one"]
-    >>> cer = datasets.load_metric("cer")
-    >>> cer_score = cer.compute(predictions=predictions, references=references)
-    >>> print(cer_score)
-    0.34146341463414637
+    >>> wer = datasets.load_metric("wer")
+    >>> wer_score = wer.compute(predictions=predictions, references=references)
+    >>> print(wer_score)
+    0.5
 """
+
+
 @datasets.utils.file_utils.add_start_docstrings(_DESCRIPTION, _KWARGS_DESCRIPTION)
-class CER(datasets.Metric):
+class WER(datasets.Metric):
     def _info(self):
         return datasets.MetricInfo(
             description=_DESCRIPTION,
@@ -74,15 +78,14 @@ class CER(datasets.Metric):
                 "https://en.wikipedia.org/wiki/Word_error_rate",
             ],
         )
+
     def _compute(self, predictions, references, chunk_size=None):
-        preds = [char for seq in predictions for char in list(seq)]
-        refs = [char for seq in references for char in list(seq)]
-        if chunk_size is None: return jiwer.wer(refs, preds)
+        if chunk_size is None: return jiwer.wer(references, predictions)
         start = 0
         end = chunk_size
         H, S, D, I = 0, 0, 0, 0
-        while start < len(refs):
-            chunk_metrics = jiwer.compute_measures(refs[start:end], preds[start:end])
+        while start < len(references):
+            chunk_metrics = jiwer.compute_measures(references[start:end], predictions[start:end])
             H = H + chunk_metrics["hits"]
             S = S + chunk_metrics["substitutions"]
             D = D + chunk_metrics["deletions"]
@@ -90,3 +93,4 @@ class CER(datasets.Metric):
             start += chunk_size
             end += chunk_size
         return float(S + D + I) / float(H + S + D)
+    
