@@ -1,11 +1,15 @@
 FROM ovhcom/ai-training-one-for-all
 
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+
 RUN apt-get update && \
     apt install -y bash \
     build-essential \
     libsndfile1-dev \
     git-lfs \
-    sox
+    ffmpeg \
+    sox \
+    libsox-fmt-mp3
 
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && \
     apt-get install git-lfs && \
@@ -35,7 +39,7 @@ RUN pip3 install git+https://github.com/huggingface/transformers.git
 
 RUN mkdir -p /workspace/wav2vec/
 
-COPY finetune.sh finetune_with_params.sh run_common_voice.py dataset_ext.py cer.py wer.py common_voice_eval.py /workspace/wav2vec/
+COPY finetune.sh finetune_with_params.sh run_common_voice.py dataset_ext.py cer.py wer.py common_voice_eval.py common_voice_usage.py /workspace/wav2vec/
 
 COPY home-server.html run_all.sh /usr/bin/
 
