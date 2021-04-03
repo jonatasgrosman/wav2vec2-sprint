@@ -463,8 +463,8 @@ def build_tokenizer(model_output_dir, train_dataset, eval_dataset, num_proc):
 
     vocab_path = os.path.join(model_output_dir, "vocab.json")
 
-    with open(vocab_path, "w", encoding="utf-8") as vocab_file:
-        json.dump(vocab_dict, vocab_file, ensure_ascii=False)
+    with open(vocab_path, "w") as vocab_file:
+        json.dump(vocab_dict, vocab_file)
 
     return Wav2Vec2CTCTokenizer(
         vocab_path,
@@ -579,6 +579,9 @@ def main():
         processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
     else:
         processor = Wav2Vec2Processor.from_pretrained(model_args.model_name_or_path)
+    
+    # save the feature_extractor and the tokenizer
+    processor.save_pretrained(training_args.output_dir)
     
     model = Wav2Vec2ForCTC.from_pretrained(
         model_args.model_name_or_path,
@@ -732,10 +735,6 @@ def main():
             checkpoint = None
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
-
-        # save the feature_extractor and the tokenizer
-        if is_main_process(training_args.local_rank):
-            processor.save_pretrained(training_args.output_dir)
 
         metrics = train_result.metrics
         max_train_samples = (
