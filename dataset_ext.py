@@ -604,6 +604,8 @@ _CSS10_URLS = {
     "zh-CN": "https://drive.google.com/uc?id=1hliY4KD_I8y4FQg5zta9IDGN0HRQLRiv",
 }
 
+_MAX_SAMPLES = 60000
+
 class CommonVoiceConfig(datasets.BuilderConfig):
     """BuilderConfig for CommonVoice."""
 
@@ -808,10 +810,14 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
         _id = 0
 
         for example in self._common_voice_examples_generator(filepath, path_to_clips):
+            if _id == _MAX_SAMPLES:
+                break
             yield _id, example
             _id += 1
 
         if css10_dir is not None:
             for example in self._css10_examples_generator(css10_dir):
+                if _id == _MAX_SAMPLES:
+                    break
                 yield _id, example
                 _id += 1
