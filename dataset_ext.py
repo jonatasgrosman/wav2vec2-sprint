@@ -604,7 +604,9 @@ _CSS10_URLS = {
     "zh-CN": "https://drive.google.com/uc?id=1hliY4KD_I8y4FQg5zta9IDGN0HRQLRiv",
 }
 
-_MAX_SAMPLES = 50000
+_MAX_TRAIN_SAMPLES = 40000
+_MAX_VAL_SAMPLES = 10000
+_MAX_TEST_SAMPLES = 2000
 
 class CommonVoiceConfig(datasets.BuilderConfig):
     """BuilderConfig for CommonVoice."""
@@ -704,7 +706,8 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "train.tsv"),
                     "path_to_clips": abs_path_to_clips,
-                    "css10_dir": css10_dl_path
+                    "css10_dir": css10_dl_path,
+                    "max_samples": _MAX_TRAIN_SAMPLES
                 },
             ),
             datasets.SplitGenerator(
@@ -712,7 +715,8 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "test.tsv"),
                     "path_to_clips": abs_path_to_clips,
-                    "css10_dir": None
+                    "css10_dir": None,
+                    "max_samples": _MAX_TEST_SAMPLES
                 },
             ),
             datasets.SplitGenerator(
@@ -720,7 +724,8 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "dev.tsv"),
                     "path_to_clips": abs_path_to_clips,
-                    "css10_dir": None
+                    "css10_dir": None,
+                    "max_samples": _MAX_VAL_SAMPLES
                 },
             )
         ]
@@ -805,19 +810,19 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                     "dataset": "css10"
                 }
 
-    def _generate_examples(self, filepath, path_to_clips, css10_dir):
+    def _generate_examples(self, filepath, path_to_clips, css10_dir, max_samples):
         """ Yields examples. """
         _id = 0
 
         for example in self._common_voice_examples_generator(filepath, path_to_clips):
-            if _id == _MAX_SAMPLES:
+            if _id == max_samples:
                 break
             yield _id, example
             _id += 1
 
         if css10_dir is not None:
             for example in self._css10_examples_generator(css10_dir):
-                if _id == _MAX_SAMPLES:
+                if _id == max_samples:
                     break
                 yield _id, example
                 _id += 1
