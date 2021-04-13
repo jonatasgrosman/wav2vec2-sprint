@@ -138,10 +138,10 @@ def evaluate(batch):
 	batch["pred_strings"] = processor.batch_decode(pred_ids)
 	return batch
 
-result = test_dataset.map(evaluate, batched=True, batch_size=32)
+result = test_dataset.map(evaluate, batched=True, batch_size=8)
 
-print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=8000)))
-print("CER: {:2f}".format(100 * cer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=8000)))
+print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=4000)))
+print("CER: {:2f}".format(100 * cer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=4000)))
 ```
 
 **Test Result**: 
