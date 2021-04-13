@@ -547,6 +547,28 @@ def main():
         cache_dir=model_args.cache_dir
     )
 
+    # filtering dataset
+    
+    train_dataset_original_size = len(train_dataset)
+    eval_dataset_original_size = len(eval_dataset)
+
+    train_dataset = train_dataset.filter(
+        lambda example: example['duration'] >= data_args.min_duration and example['duration'] <= data_args.max_duration,
+        num_proc=data_args.preprocessing_num_workers
+    )
+    
+    if data_args.max_train_samples is not None and train_dataset_original_size > data_args.max_train_samples:
+        train_dataset = train_dataset.select(range(data_args.max_train_samples))
+
+    if data_args.max_val_samples is not None and eval_dataset_original_size > data_args.max_val_samples:
+        eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+
+    train_dataset_final_size = len(train_dataset)
+    eval_dataset_final_size = len(eval_dataset)
+    
+    logger.info(f"After filtering {train_dataset_final_size} of {train_dataset_original_size} samples will be used to train the model")
+    logger.info(f"After filtering {eval_dataset_final_size} of {eval_dataset_original_size} samples will be used to eval the model")
+
     # Create and save tokenizer
     chars_to_ignore_regex = f"[{re.escape(''.join(data_args.chars_to_ignore))}]"
 
@@ -598,26 +620,6 @@ def main():
         vocab_size=len(processor.tokenizer),
         ctc_zero_infinity=True
     )
-
-    
-    # filtering training dataset
-    
-    train_dataset_original_size = len(train_dataset)
-
-    if data_args.max_train_samples is not None:
-        train_dataset = train_dataset.select(range(data_args.max_train_samples))
-
-    if data_args.max_val_samples is not None:
-        eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
-
-    train_dataset = train_dataset.filter(
-        lambda example: example['duration'] >= data_args.min_duration and example['duration'] <= data_args.max_duration,
-        num_proc=data_args.preprocessing_num_workers
-    )
-
-    train_dataset_final_size = len(train_dataset)
-    
-    logger.info(f"After filtering {train_dataset_final_size} of {train_dataset_original_size} samples will be used to train the model")
 
     # Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
