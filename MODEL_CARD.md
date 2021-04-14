@@ -100,12 +100,16 @@ from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 LANG_ID = "pt"
 MODEL_ID = "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese"
 DEVICE = "cuda"
+MAX_SAMPLES = 8000
 
 CHARS_TO_IGNORE = [",", "?", "¿", ".", "!", "¡", "-", ";", ":", '""', "%", '"', "�", "ʿ", "·", "჻", "~", "՞", 
                    "؟", "،", "।", "॥", "«", "»", "„", "“", "”", "「", "」", "‘", "’", "《", "》", "(", ")", "[", "]",
                    "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→", "。"]
 
 test_dataset = load_dataset("common_voice", LANG_ID, split="test")
+if len(test_dataset) > MAX_SAMPLES:
+    test_dataset = test_dataset.select(range(MAX_SAMPLES))
+
 wer = load_metric("wer") # https://github.com/jonatasgrosman/wav2vec2-sprint/blob/main/wer.py
 cer = load_metric("cer") # https://github.com/jonatasgrosman/wav2vec2-sprint/blob/main/cer.py
 
