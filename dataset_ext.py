@@ -606,7 +606,7 @@ _CSS10_URLS = {
 
 _MAX_TRAIN_SAMPLES = 40000
 _MAX_VAL_SAMPLES = 10000
-_MAX_TEST_SAMPLES = 2000
+_MAX_TEST_SAMPLES = 4000
 
 class CommonVoiceConfig(datasets.BuilderConfig):
     """BuilderConfig for CommonVoice."""
