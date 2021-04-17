@@ -604,9 +604,9 @@ _CSS10_URLS = {
     "zh-CN": "https://drive.google.com/uc?id=1hliY4KD_I8y4FQg5zta9IDGN0HRQLRiv",
 }
 
-_MAX_TRAIN_SAMPLES = 40000
-_MAX_VAL_SAMPLES = 10000
-_MAX_TEST_SAMPLES = 4000
+_MAX_TRAIN_SAMPLES = 60000
+_MAX_VAL_SAMPLES = 20000
+_MAX_TEST_SAMPLES = 2000
 
 class CommonVoiceConfig(datasets.BuilderConfig):
     """BuilderConfig for CommonVoice."""
