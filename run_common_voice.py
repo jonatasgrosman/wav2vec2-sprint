@@ -458,7 +458,8 @@ def build_tokenizer(model_output_dir, train_dataset, eval_dataset, num_proc):
     special_vocab_dict = {"<pad>": 0, "<s>": 1, "</s>": 2, "<unk>": 3, "|": 4}
     
     vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
-    vocab_dict = {v: k + len(special_vocab_dict) for k, v in enumerate(vocab_list) if v != " "}
+    vocab_list = [x for x in vocab_list if x != " "] # removing whitespace character
+    vocab_dict = {v: k + len(special_vocab_dict) for k, v in enumerate(vocab_list)}
     vocab_dict = dict(special_vocab_dict, **vocab_dict)
 
     vocab_path = os.path.join(model_output_dir, "vocab.json")
