@@ -208,6 +208,9 @@ class DataTrainingArguments:
             "help": "The maximum duration (in seconds) that a sample needs to have to be considered for training"
         },
     )
+    use_only_common_voice_data: bool = field(
+        default=False, metadata={"help": "Use only common voice data in training."}
+    )
 
 
 @dataclass
@@ -553,8 +556,14 @@ def main():
     train_dataset_original_size = len(train_dataset)
     eval_dataset_original_size = len(eval_dataset)
 
+    if data_args.use_only_common_voice_data:
+        train_dataset = train_dataset.filter(
+            lambda example: example["dataset"] == "common_voice",
+            num_proc=data_args.preprocessing_num_workers
+        )
+
     train_dataset = train_dataset.filter(
-        lambda example: example['duration'] >= data_args.min_duration and example['duration'] <= data_args.max_duration,
+        lambda example: example["duration"] >= data_args.min_duration and example["duration"] <= data_args.max_duration,
         num_proc=data_args.preprocessing_num_workers
     )
     
