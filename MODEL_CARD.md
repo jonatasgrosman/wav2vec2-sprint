@@ -140,11 +140,18 @@ def evaluate(batch):
 
 result = test_dataset.map(evaluate, batched=True, batch_size=8)
 
-print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=1000)))
-print("CER: {:2f}".format(100 * cer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=1000)))
+predictions = [x.upper() for x in result["pred_strings"]]
+references = [x.upper() for x in result["sentence"]]
+
+print(f"WER: {wer.compute(predictions=predictions, references=references, chunk_size=1000) * 100}")
+print(f"CER: {cer.compute(predictions=predictions, references=references, chunk_size=1000) * 100}")
 ```
 
-**Test Result**: 
+**Test Result**:
 
-- WER: XX.XX%
-- CER: XX.XX%
+My model may report better scores than others because of some specificity of my evaluation script, so I ran the same evaluation script on other models (on YYYY-MM-DD) to make a fairer comparison.
+
+| Model | WER | CER |
+| ------------- | ------------- | ------------- |
+| **jonatasgrosman/wav2vec2-large-xlsr-53-portuguese** | XX.XX% | XX.XX% |
+| username/model_name | XX.XX% | XX.XX% |

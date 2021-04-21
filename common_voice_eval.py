@@ -50,5 +50,8 @@ def evaluate(batch):
 
 result = test_dataset.map(evaluate, batched=True, batch_size=8)
 
-print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=1000)))
-print("CER: {:2f}".format(100 * cer.compute(predictions=result["pred_strings"], references=result["sentence"], chunk_size=1000)))
+predictions = [x.upper() for x in result["pred_strings"]]
+references = [x.upper() for x in result["sentence"]]
+
+print(f"WER: {wer.compute(predictions=predictions, references=references, chunk_size=1000) * 100}")
+print(f"CER: {cer.compute(predictions=predictions, references=references, chunk_size=1000) * 100}")
