@@ -79,3 +79,24 @@ $ git push
 ## Troubleshooting
 
 - audioread.exceptions.NoBackendError: `$ sudo apt-get install ffmpeg sox libsox-fmt-mp3`
+
+
+## Finetuned models
+
+### Wav2Vec2-XLSR-53
+
+- [Arabic](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-arabic)
+- [Chinese](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn)
+- [Dutch](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-dutch)
+- [Finnish](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-finnish)
+- [French](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-french)
+- [German](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-german)
+- [Greek](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-greek)
+- [Hungarian](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-hungarian)
+- [Italian](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-italian)
+- [Japanese](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-japanese)
+- [Persian](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-persian)
+- [Polish](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-polish)
+- [Portuguese](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-portuguese)
+- [Russian](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-russian)
+- [Spanish](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-spanish)
