@@ -50,6 +50,18 @@ from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.trainer_pt_utils import LengthGroupedSampler, DistributedLengthGroupedSampler
 
 
+PRETRAINED_MODELS = [
+    "facebook/wav2vec2-large-xlsr-53",
+    "facebook/wav2vec2-large-es-voxpopuli",
+    "facebook/wav2vec2-large-fr-voxpopuli",
+    "facebook/wav2vec2-large-it-voxpopuli",
+    "facebook/wav2vec2-large-nl-voxpopuli",
+    "facebook/wav2vec2-large-sv-voxpopuli",
+    "facebook/wav2vec2-large-10k-voxpopuli",
+    "facebook/wav2vec2-large-100k-voxpopuli"
+]
+
+
 if is_apex_available():
     from apex import amp
 
@@ -163,12 +175,6 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_split_name: Optional[str] = field(
-        default="train+validation",
-        metadata={
-            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
-        },
-    )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
@@ -191,9 +197,11 @@ class DataTrainingArguments:
         },
     )
     chars_to_ignore: List[str] = list_field(
-        default=[",", "?", "¿", ".", "!", "¡", ";", ":", '""', "%", '"', "�", "ʿ", "·", "჻", "~", "՞", 
+        default=[",", "?", "¿", ".", "!", "¡", ";", ":", '""', "%", '"', "�", "ʿ", "·", "჻", "~", "՞",
                  "؟", "،", "।", "॥", "«", "»", "„", "“", "”", "「", "」", "‘", "’", "《", "》", "(", ")", "[", "]",
-                 "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→", "。"],
+                 "{", "}", "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→", "。",
+                 "、", "﹂", "﹁", "‧", "～", "﹏", "，", "｛", "｝", "（", "）", "［", "］", "【", "】", "‥", "〽",
+                 "『", "』", "〝", "〟", "⟨", "⟩", "〜", "：", "！", "？", "♪", "؛"],
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
     min_duration: Optional[float] = field(
@@ -540,18 +548,24 @@ def main():
     set_seed(training_args.seed)
 
     # Get the datasets:
-    train_dataset = datasets.load_dataset(
-        "dataset_ext.py", data_args.dataset_config_name, 
-        split=data_args.train_split_name, 
-        cache_dir=model_args.cache_dir
-    )
-    eval_dataset = datasets.load_dataset(
-        "dataset_ext.py", data_args.dataset_config_name,
-        split="test", 
-        cache_dir=model_args.cache_dir
-    )
 
-    # filtering dataset
+    # As Common Voice dataset for most of the languages are really small, we'll merge the train and validation splits
+    dataset = datasets.load_dataset(
+        "dataset_ext.py", data_args.dataset_config_name,
+        split="train+validation", 
+        cache_dir=model_args.cache_dir
+    )
+    
+    # We'll use 20% of the resulting dataset for validation, but the max eval size is 2k samples
+    if len(dataset) > 10000:
+        dataset = dataset.train_test_split(test_size=2000)
+    else:
+        dataset = dataset.train_test_split(test_size=0.2)
+
+    train_dataset = dataset["train"]
+    eval_dataset = dataset["test"]
+
+    # Filtering dataset:
     
     train_dataset_original_size = len(train_dataset)
     eval_dataset_original_size = len(eval_dataset)
@@ -603,7 +617,7 @@ def main():
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     
-    if model_args.model_name_or_path == "facebook/wav2vec2-large-xlsr-53":
+    if model_args.model_name_or_path in PRETRAINED_MODELS:
         tokenizer = build_tokenizer(training_args.output_dir, train_dataset, eval_dataset, data_args.preprocessing_num_workers)
         feature_extractor = Wav2Vec2FeatureExtractor(
             feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True

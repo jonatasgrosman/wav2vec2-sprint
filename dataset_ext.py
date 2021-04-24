@@ -604,9 +604,8 @@ _CSS10_URLS = {
     "zh-CN": "https://drive.google.com/uc?id=1hliY4KD_I8y4FQg5zta9IDGN0HRQLRiv",
 }
 
-_MAX_TRAIN_SAMPLES = 60000
+_MAX_TRAIN_SAMPLES = 80000
 _MAX_VAL_SAMPLES = 20000
-_MAX_TEST_SAMPLES = 2000
 
 class CommonVoiceConfig(datasets.BuilderConfig):
     """BuilderConfig for CommonVoice."""
@@ -708,15 +707,6 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                     "path_to_clips": abs_path_to_clips,
                     "css10_dir": css10_dl_path,
                     "max_samples": _MAX_TRAIN_SAMPLES
-                },
-            ),
-            datasets.SplitGenerator(
-                name=datasets.Split.TEST,
-                gen_kwargs={
-                    "filepath": os.path.join(abs_path_to_data, "test.tsv"),
-                    "path_to_clips": abs_path_to_clips,
-                    "css10_dir": None,
-                    "max_samples": _MAX_TEST_SAMPLES
                 },
             ),
             datasets.SplitGenerator(
