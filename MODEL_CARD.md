@@ -149,7 +149,7 @@ print(f"CER: {cer.compute(predictions=predictions, references=references, chunk_
 
 **Test Result**:
 
-My model may report better scores than others because of some specificity of my evaluation script, so I ran the same evaluation script on other models (on YYYY-MM-DD) to make a fairer comparison.
+In the table below I report the Word Error Rate (WER) and the Character Error Rate (CER) of the model. I ran the evaluation script described above on other models as well (on YYYY-MM-DD). Note that the table below may show different results from those already reported, this may have been caused due to some specificity of the other evaluation scripts used.
 
 | Model | WER | CER |
 | ------------- | ------------- | ------------- |
