@@ -190,10 +190,16 @@ class DataTrainingArguments:
         },
     )
     max_val_samples: Optional[int] = field(
-        default=None,
+        default=1000,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
             "value if set."
+        },
+    )
+    val_ratio: Optional[float] = field(
+        default=0.2,
+        metadata={
+            "help": "Percentage of dataset samples to be used for evaluation, default is 20%"
         },
     )
     chars_to_ignore: List[str] = list_field(
@@ -556,11 +562,10 @@ def main():
         cache_dir=model_args.cache_dir
     )
     
-    # We'll use 20% of the resulting dataset for validation, but the max eval size is 2k samples
-    if len(dataset) > 10000:
-        dataset = dataset.train_test_split(test_size=2000)
+    if len(dataset) * data_args.val_ratio > data_args.max_val_samples:
+        dataset = dataset.train_test_split(test_size=data_args.max_val_samples)
     else:
-        dataset = dataset.train_test_split(test_size=0.2)
+        dataset = dataset.train_test_split(test_size=data_args.val_ratio)
 
     train_dataset = dataset["train"]
     eval_dataset = dataset["test"]
