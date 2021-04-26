@@ -514,6 +514,7 @@ def main():
         model_args, data_args, additional_training_args, training_args = parser.parse_args_into_dataclasses()
 
     os.makedirs(training_args.output_dir, exist_ok=True)
+    os.makedirs(model_args.cache_dir, exist_ok=True)
     
     wandb.init(dir=model_args.cache_dir)
 
