@@ -20,12 +20,15 @@ import os
 import re
 import homoglyphs as hg
 import gdown
+import json
 
 import datasets
 
 import soundfile as sf
 import librosa
 import warnings
+
+from lang_trans.arabic import buckwalter
 
 _DATA_URL = "https://voice-prod-bundler-ee1969a6ce8178826482b88e843c335139bd3fb4.s3.amazonaws.com/cv-corpus-6.1-2020-12-11/{}.tar.gz"
 
@@ -604,6 +607,25 @@ _CSS10_URLS = {
     "zh-CN": "https://drive.google.com/uc?id=1hliY4KD_I8y4FQg5zta9IDGN0HRQLRiv",
 }
 
+_JSUT_URLS = {
+    "ja": "http://ss-takashi.sakura.ne.jp/corpus/jsut_ver1.1.zip"
+}
+
+_NST_URLS = {
+    "sv-SE": {
+        "metadata": "https://www.nb.no/sbfil/talegjenkjenning/16kHz_2020/se_2020/ADB_SWE_0467.tar.gz",
+        "files": "https://www.nb.no/sbfil/talegjenkjenning/16kHz_2020/se_2020/lydfiler_16_1.tar.gz",
+    }
+}
+
+_FREE_ST_URLS = {
+    "zh-CN": "https://www.openslr.org/resources/38/ST-CMDS-20170001_1-OS.tar.gz",
+}
+
+_ARABIC_SPEECH = {
+    "ar": "http://en.arabicspeechcorpus.com/arabic-speech-corpus.zip"
+}
+
 _MAX_TRAIN_SAMPLES = 80000
 _MAX_VAL_SAMPLES = 20000
 
@@ -694,10 +716,32 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
         abs_path_to_data = os.path.join(dl_path, "cv-corpus-6.1-2020-12-11", self.config.name)
         abs_path_to_clips = os.path.join(abs_path_to_data, "clips")
 
-        css10_dl_path = None
+        css10_dir = None
         if self.config.name in _CSS10_URLS:
             css10_url = _CSS10_URLS[self.config.name]
-            css10_dl_path = dl_manager.extract(dl_manager.download_custom(css10_url, self._download_from_gdrive))
+            css10_dir = dl_manager.extract(dl_manager.download_custom(css10_url, self._download_from_gdrive))
+
+        jsut_dir = None
+        if self.config.name in _JSUT_URLS:
+            jsut_url = _JSUT_URLS[self.config.name]
+            jsut_dir = dl_manager.download_and_extract(jsut_url)
+            jsut_dir = os.path.join(jsut_dir, "jsut_ver1.1")
+
+        nst_metadata_dir = None
+        nst_files_dir = None
+        if self.config.name in _NST_URLS:
+            nst_metadata_dir = dl_manager.download_and_extract(_NST_URLS[self.config.name]["metadata"])
+            nst_files_dir = dl_manager.download_and_extract(_NST_URLS[self.config.name]["files"])
+
+        free_st_dir = None
+        if self.config.name in _FREE_ST_URLS:
+            free_st_dir = dl_manager.download_and_extract(_FREE_ST_URLS[self.config.name])
+            free_st_dir = os.path.join(free_st_dir, "ST-CMDS-20170001_1-OS")
+
+        arabic_speech_dir = None
+        if self.config.name in _ARABIC_SPEECH:
+            arabic_speech_dir = dl_manager.download_and_extract(_ARABIC_SPEECH[self.config.name])
+            arabic_speech_dir = os.path.join(arabic_speech_dir, "arabic-speech-corpus")
 
         return [
             datasets.SplitGenerator(
@@ -705,7 +749,12 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                 gen_kwargs={
                     "filepath": os.path.join(abs_path_to_data, "train.tsv"),
                     "path_to_clips": abs_path_to_clips,
-                    "css10_dir": css10_dl_path,
+                    "css10_dir": css10_dir,
+                    "jsut_dir": jsut_dir,
+                    "nst_metadata_dir": nst_metadata_dir,
+                    "nst_files_dir": nst_files_dir,
+                    "free_st_dir": free_st_dir,
+                    "arabic_speech_dir": arabic_speech_dir,
                     "max_samples": _MAX_TRAIN_SAMPLES
                 },
             ),
@@ -715,6 +764,11 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                     "filepath": os.path.join(abs_path_to_data, "dev.tsv"),
                     "path_to_clips": abs_path_to_clips,
                     "css10_dir": None,
+                    "jsut_dir": None,
+                    "nst_metadata_dir": None,
+                    "nst_files_dir": None,
+                    "free_st_dir": None,
+                    "arabic_speech_dir": None,
                     "max_samples": _MAX_VAL_SAMPLES
                 },
             )
@@ -780,6 +834,7 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
 
                 audio_path = self._convert_to_flac_and_save_it(os.path.join(css10_dir, values[0]))
                 text = values[1] if self.config.name in ["ja", "zh"] else values[2]
+                text = re.sub("\s+", " ", text) # remove multiple spaces
                 duration = float(values[3])
 
                 if self.config.unk_token_regex is not None:
@@ -800,7 +855,174 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                     "dataset": "css10"
                 }
 
-    def _generate_examples(self, filepath, path_to_clips, css10_dir, max_samples):
+    def _jsut_examples_generator(self, jsut_dir):
+
+        for subset in os.listdir(jsut_dir):
+            
+            if not os.path.isdir(os.path.join(jsut_dir, subset)):
+                continue
+                
+            transcript_path = os.path.join(jsut_dir, subset, "transcript_utf8.txt")
+
+            with open(transcript_path, encoding="utf-8") as f:
+
+                lines = f.readlines()
+
+                for line in lines:
+
+                    values = line.split(":")
+                    audio_path = os.path.join(jsut_dir, subset, "wav", f"{values[0]}.wav")
+                    text = values[1]
+                    text = re.sub("\s+", " ", text) # remove multiple spaces
+
+                    if self.config.unk_token_regex is not None:
+                        text = re.sub(self.config.unk_token_regex, "<unk>", text)
+
+                    new_audio_path = self._convert_to_flac_and_save_it(audio_path)
+                    speech_array, sampling_rate = sf.read(new_audio_path)
+                    duration = len(speech_array) / sampling_rate
+
+                    yield {
+                        "client_id": None,
+                        "path": new_audio_path,
+                        "sentence": text,
+                        "up_votes": 0,
+                        "down_votes": 0,
+                        "age": None,
+                        "gender": None,
+                        "accent": None,
+                        "locale": None,
+                        "segment": None,
+                        "duration": duration,
+                        "dataset": "jsut"
+                    }
+
+    def _nst_examples_generator(self, nst_metadata_dir, nst_files_dir):
+
+        for metadata_filename in os.listdir(nst_metadata_dir):
+            
+            metadata_filepath = os.path.join(nst_metadata_dir, metadata_filename)
+
+            with open(metadata_filepath) as metadata_file:
+                metadata = json.load(metadata_file)
+
+                client_id = metadata.get("info", {}).get("Speaker_ID", None)
+                age = metadata.get("info", {}).get("Age", None)
+                gender = metadata.get("info", {}).get("Sex", None)
+                lang = metadata.get("metadata").get("lang")
+                pid = metadata.get("pid")
+                audio_dir = os.path.join(nst_files_dir, lang, pid)
+
+                for val_recording in metadata.get("val_recordings", []):
+
+                    audio_filename = f"{pid}_{val_recording.get('file').replace('.wav', '-1.wav')}"
+                    audio_path = os.path.join(audio_dir, audio_filename)
+                    
+                    # there are some missing files on the original dataset, so we need to handle this
+                    if not os.path.isfile(audio_path): 
+                        continue
+                    
+                    text = val_recording.get("text")
+                    text = re.sub("\s+", " ", text) # remove multiple spaces
+
+                    if self.config.unk_token_regex is not None:
+                        text = re.sub(self.config.unk_token_regex, "<unk>", text)
+
+                    new_audio_path = self._convert_to_flac_and_save_it(audio_path)
+                    speech_array, sampling_rate = sf.read(new_audio_path)
+                    duration = len(speech_array) / sampling_rate
+
+                    yield {
+                        "client_id": client_id,
+                        "path": new_audio_path,
+                        "sentence": text,
+                        "up_votes": 0,
+                        "down_votes": 0,
+                        "age": age,
+                        "gender": gender,
+                        "accent": None,
+                        "locale": None,
+                        "segment": None,
+                        "duration": duration,
+                        "dataset": "nst"
+                    }
+
+    def _free_st_examples_generator(self, free_st_dir):
+
+        for filename in os.listdir(free_st_dir):
+
+            if filename.endswith(".wav"):
+
+                audio_path = os.path.join(free_st_dir, filename)
+                text_path = os.path.join(free_st_dir, filename.replace(".wav", ".txt"))
+
+                with open(text_path, "r") as text_file:
+                    text = text_file.read().replace("\n", "").strip()
+                    text = re.sub("\s+", " ", text) # remove multiple spaces
+
+                if self.config.unk_token_regex is not None:
+                    text = re.sub(self.config.unk_token_regex, "<unk>", text)
+
+                new_audio_path = self._convert_to_flac_and_save_it(audio_path)
+                speech_array, sampling_rate = sf.read(new_audio_path)
+                duration = len(speech_array) / sampling_rate
+
+                yield {
+                    "client_id": None,
+                    "path": new_audio_path,
+                    "sentence": text,
+                    "up_votes": 0,
+                    "down_votes": 0,
+                    "age": None,
+                    "gender": None,
+                    "accent": None,
+                    "locale": None,
+                    "segment": None,
+                    "duration": duration,
+                    "dataset": "free_st"
+                }
+
+    def _arabic_speech_examples_generator(self, arabic_speech_dir):
+
+        with open(os.path.join(arabic_speech_dir, "orthographic-transcript.txt"), encoding="utf-8") as f:
+            
+            lines = f.readlines()
+
+            for line in lines:
+
+                values = line.split('" "')
+                filename = values[0].strip()[1:]
+                text = values[1].strip()[:-1]
+                audio_path = os.path.join(arabic_speech_dir, "wav", filename)
+
+                # converting buckwalter format to arabic letters
+                text = buckwalter.untransliterate(text)
+                text = re.sub("\s+", " ", text) # remove multiple spaces
+
+                if self.config.unk_token_regex is not None:
+                    text = re.sub(self.config.unk_token_regex, "<unk>", text)
+
+                new_audio_path = self._convert_to_flac_and_save_it(audio_path)
+                speech_array, sampling_rate = sf.read(new_audio_path)
+                duration = len(speech_array) / sampling_rate
+
+                yield {
+                    "client_id": None,
+                    "path": new_audio_path,
+                    "sentence": text,
+                    "up_votes": 0,
+                    "down_votes": 0,
+                    "age": None,
+                    "gender": None,
+                    "accent": None,
+                    "locale": None,
+                    "segment": None,
+                    "duration": duration,
+                    "dataset": "arabic_speech"
+                }
+
+    def _generate_examples(self, filepath, path_to_clips, css10_dir, jsut_dir, nst_metadata_dir, 
+                           nst_files_dir, free_st_dir, arabic_speech_dir, max_samples):
         """ Yields examples. """
         _id = 0
 
@@ -816,3 +1038,33 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                     break
                 yield _id, example
                 _id += 1
+
+        if jsut_dir is not None:
+            for example in self._jsut_examples_generator(jsut_dir):
+                if _id == max_samples:
+                    break
+                yield _id, example
+                _id += 1
+
+        if nst_files_dir is not None:
+            for example in self._nst_examples_generator(nst_metadata_dir, nst_files_dir):
+                if _id == max_samples:
+                    break
+                yield _id, example
+                _id += 1
+
+        if free_st_dir is not None:
+            for example in self._free_st_examples_generator(free_st_dir):
+                if _id == max_samples:
+                    break
+                yield _id, example
+                _id += 1
+        
+        if arabic_speech_dir is not None:
+            root_dirs = [arabic_speech_dir, os.path.join(arabic_speech_dir, "test set")]
+            for root_dir in root_dirs:
+                for example in self._arabic_speech_examples_generator(root_dir):
+                    if _id == max_samples:
+                        break
+                    yield _id, example
+                    _id += 1
