@@ -112,7 +112,7 @@ class AdditionalTrainingArguments:
         metadata={"help": "Probability to apply Pitch Shift in the original samples"},
     )
     min_char_occurrence: Optional[int] = field(
-        default=30,
+        default=20,
         metadata={"help": "Minimum number of character occurrences to be considered for vocabulary builder"},
     )
     max_dataset_size_vocab_builder: Optional[int] = field(
