@@ -111,6 +111,10 @@ class AdditionalTrainingArguments:
         default=0.5,
         metadata={"help": "Probability to apply Pitch Shift in the original samples"},
     )
+    min_char_occurrence: Optional[int] = field(
+        default=20,
+        metadata={"help": "Minimum number of character occurrences to be considered for vocabulary"},
+    )
 
 
 @dataclass
@@ -207,7 +211,7 @@ class DataTrainingArguments:
                  "؟", "،", "।", "॥", "«", "»", "„", "“", "”", "「", "」", "‘", "’", "《", "》", "(", ")", "[", "]",
                  "{", "}", "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→", "。",
                  "、", "﹂", "﹁", "‧", "～", "﹏", "，", "｛", "｝", "（", "）", "［", "］", "【", "】", "‥", "〽",
-                 "『", "』", "〝", "〟", "⟨", "⟩", "〜", "：", "！", "？", "♪", "؛", "/", "\\"],
+                 "『", "』", "〝", "〟", "⟨", "⟩", "〜", "：", "！", "？", "♪", "؛", "/", "\\", "º", "−", "^", "'", "ʻ", "ˆ"],
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
     min_duration: Optional[float] = field(
@@ -450,12 +454,11 @@ class CTCTrainer(Trainer):
         return loss.detach()
 
 
-def build_tokenizer(model_output_dir, train_dataset, eval_dataset, num_proc):
+def build_tokenizer(model_output_dir, train_dataset, eval_dataset, num_proc, min_char_occurrence):
 
     def extract_all_chars(batch):
-        all_text = " ".join(batch["text"]).replace("<unk>","")
-        vocab = list(set(all_text))
-        return {"vocab": [vocab], "all_text": [all_text]}
+        all_text = " ".join(batch["text"]).replace("<unk>", "")
+        return {"all_text": [all_text]}
 
     vocab_train = train_dataset.map(
         extract_all_chars,
@@ -474,7 +477,10 @@ def build_tokenizer(model_output_dir, train_dataset, eval_dataset, num_proc):
 
     special_vocab_dict = {"<pad>": 0, "<s>": 1, "</s>": 2, "<unk>": 3, "|": 4}
     
-    vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
+    all_text = vocab_train["all_text"][0] + vocab_test["all_text"][0]
+
+    character_counter = collections.Counter(all_text)
+    vocab_list = sorted([character for character, count in character_counter.items() if count >= min_char_occurrence])
     vocab_list = [x for x in vocab_list if x != " "] # removing whitespace character
     vocab_dict = {v: k + len(special_vocab_dict) for k, v in enumerate(vocab_list)}
     vocab_dict = dict(special_vocab_dict, **vocab_dict)
@@ -624,7 +630,7 @@ def main():
     # download model & vocab.
     
     if model_args.model_name_or_path in PRETRAINED_MODELS:
-        tokenizer = build_tokenizer(training_args.output_dir, train_dataset, eval_dataset, data_args.preprocessing_num_workers)
+        tokenizer = build_tokenizer(training_args.output_dir, train_dataset, eval_dataset, data_args.preprocessing_num_workers, additional_training_args.min_char_occurrence)
         feature_extractor = Wav2Vec2FeatureExtractor(
             feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
         )
