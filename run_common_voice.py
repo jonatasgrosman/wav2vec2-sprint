@@ -51,6 +51,7 @@ from transformers.trainer_pt_utils import LengthGroupedSampler, DistributedLengt
 
 
 PRETRAINED_MODELS = [
+    "facebook/wav2vec2-large",
     "facebook/wav2vec2-large-xlsr-53",
     "facebook/wav2vec2-large-es-voxpopuli",
     "facebook/wav2vec2-large-fr-voxpopuli",
@@ -107,17 +108,25 @@ class AdditionalTrainingArguments:
         default=0.5,
         metadata={"help": "Probability to apply Gain in the original samples"},
     )
-    apply_pitch_shift_p: Optional[float] = field(
+    apply_pitch_shift_with_p: Optional[float] = field(
         default=0.5,
         metadata={"help": "Probability to apply Pitch Shift in the original samples"},
     )
-    min_char_occurrence: Optional[int] = field(
-        default=20,
-        metadata={"help": "Minimum number of character occurrences to be considered for vocabulary builder"},
+    apply_time_stretch_with_p: Optional[float] = field(
+        default=0.5,
+        metadata={"help": "Probability to apply Time Stretch in the original samples"},
+    )
+    min_char_occurrence_ratio: Optional[float] = field(
+        default=None,
+        metadata={"help": "Minimum ratio of character occurrences to be considered for the vocabulary builder"},
     )
     max_dataset_size_vocab_builder: Optional[int] = field(
         default=10000,
         metadata={"help": "Maximum size of the dataset to be considered for vocabulary builder"},
+    )
+    remove_samples_with_oov_from_training: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether to remove samples from training when there are OOV characters on them"},
     )
 
 @dataclass
@@ -210,11 +219,11 @@ class DataTrainingArguments:
         },
     )
     chars_to_ignore: List[str] = list_field(
-        default=[",", "?", "¿", ".", "!", "¡", ";", ":", '""', "%", '"', "�", "ʿ", "·", "჻", "~", "՞",
+        default=[",", "?", "¿", ".", "!", "¡", ";", "；", ":", '""', "%", '"', "�", "ʿ", "·", "჻", "~", "՞",
                  "؟", "،", "।", "॥", "«", "»", "„", "“", "”", "「", "」", "‘", "’", "《", "》", "(", ")", "[", "]",
                  "{", "}", "=", "`", "_", "+", "<", ">", "…", "–", "°", "´", "ʾ", "‹", "›", "©", "®", "—", "→", "。",
                  "、", "﹂", "﹁", "‧", "～", "﹏", "，", "｛", "｝", "（", "）", "［", "］", "【", "】", "‥", "〽",
-                 "『", "』", "〝", "〟", "⟨", "⟩", "〜", "：", "！", "？", "♪", "؛", "/", "\\", "º", "−", "^", "'", "ʻ", "ˆ"],
+                 "『", "』", "〝", "〟", "⟨", "⟩", "〜", "：", "！", "？", "♪", "؛", "/", "\\", "º", "−", "^", "ʻ", "ˆ"],
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
     min_duration: Optional[float] = field(
@@ -267,18 +276,21 @@ class DataCollatorCTCWithPadding:
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
 
-    def __init__(self, processor, padding=True, apply_gaussian_noise_with_p=0.5, apply_gain_with_p=0.5, apply_pitch_shift_p=0.5, sample_rate=16_000):
+    def __init__(self, processor, padding=True, apply_gaussian_noise_with_p=0.5, apply_gain_with_p=0.5, apply_pitch_shift_with_p=0.5, 
+                 apply_time_stretch_with_p=0.5, sample_rate=16_000):
         self.processor = processor
         self.padding = padding
         self.apply_gaussian_noise_with_p = apply_gaussian_noise_with_p
         self.apply_gain_with_p = apply_gain_with_p
-        self.apply_pitch_shift_p = apply_pitch_shift_p
+        self.apply_pitch_shift_with_p = apply_pitch_shift_with_p
+        self.apply_time_stretch_with_p = apply_time_stretch_with_p
         self.sample_rate = sample_rate
 
         self.augmentator = None
-        if self.apply_gaussian_noise_with_p > 0 or self.apply_gain_with_p > 0 or self.apply_pitch_shift_p > 0:
+        if self.apply_gaussian_noise_with_p + self.apply_gain_with_p + self.apply_pitch_shift_with_p + self.apply_time_stretch_with_p > 0:
             self.augmentator = Compose([
-                PitchShift(min_semitones=-1, max_semitones=1, p=self.apply_pitch_shift_p),
+                TimeStretch(min_rate=0.8, max_rate=1.2, leave_length_unchanged=False, p=self.apply_time_stretch_with_p),
+                PitchShift(min_semitones=-1, max_semitones=1, p=self.apply_pitch_shift_with_p),
                 Gain(min_gain_in_db=-1, max_gain_in_db=1, p=self.apply_gain_with_p),
                 AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.001, p=self.apply_gaussian_noise_with_p),
             ])
@@ -457,7 +469,7 @@ class CTCTrainer(Trainer):
         return loss.detach()
 
 
-def build_tokenizer(model_output_dir, dataset, num_proc, min_char_occurrence):
+def build_tokenizer(model_output_dir, dataset, num_proc, min_char_occurrence_ratio):
 
     def extract_all_chars(batch):
         all_text = " ".join(batch["text"]).replace("<unk>", "")
@@ -473,9 +485,17 @@ def build_tokenizer(model_output_dir, dataset, num_proc, min_char_occurrence):
 
     special_vocab_dict = {"<pad>": 0, "<s>": 1, "</s>": 2, "<unk>": 3, "|": 4}
 
-    character_counter = collections.Counter(vocab_train["all_text"][0])
-    vocab_list = sorted([character for character, count in character_counter.items() if count >= min_char_occurrence])
-    vocab_list = [x for x in vocab_list if x != " "] # removing whitespace character
+    min_char_occurrence = int(min_char_occurrence_ratio * len(vocab_train["all_text"][0])) if min_char_occurrence_ratio is not None else 1
+
+    if min_char_occurrence > 1:
+        character_counter = collections.Counter(vocab_train["all_text"][0])
+        vocab_list = [character for character, count in character_counter.items() if count >= min_char_occurrence]
+    else:
+        vocab_list = set(vocab_train["all_text"][0])
+
+    vocab_list = [x for x in vocab_list if x.isalpha() or x in ["-", "'"]] # removing non-alpha (except - or ') characters
+
+    vocab_list = sorted(vocab_list)
     vocab_dict = {v: k + len(special_vocab_dict) for k, v in enumerate(vocab_list)}
     vocab_dict = dict(special_vocab_dict, **vocab_dict)
 
@@ -562,19 +582,26 @@ def main():
         split="train+validation", 
         cache_dir=model_args.cache_dir
     )
-    
-    if len(dataset) * data_args.val_ratio > data_args.max_val_samples:
-        dataset = dataset.train_test_split(test_size=data_args.max_val_samples)
-    else:
-        dataset = dataset.train_test_split(test_size=data_args.val_ratio)
 
-    train_dataset = dataset["train"]
-    eval_dataset = dataset["test"]
+    if data_args.val_ratio > 0 and data_args.max_val_samples > 0 and training_args.do_eval:
+        if len(dataset) * data_args.val_ratio > data_args.max_val_samples:
+            dataset = dataset.train_test_split(test_size=data_args.max_val_samples)
+        else:
+            dataset = dataset.train_test_split(test_size=data_args.val_ratio)
+
+        train_dataset = dataset["train"]
+        eval_dataset = dataset["test"]
+
+    else:
+        train_dataset = dataset
+        eval_dataset = None
+
 
     # Filtering dataset:
     
     train_dataset_original_size = len(train_dataset)
-    eval_dataset_original_size = len(eval_dataset)
+    if eval_dataset is not None:
+        eval_dataset_original_size = len(eval_dataset)
 
     if data_args.use_only_common_voice_data:
         train_dataset = train_dataset.filter(
@@ -590,14 +617,16 @@ def main():
     if data_args.max_train_samples is not None and train_dataset_original_size > data_args.max_train_samples:
         train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
-    if data_args.max_val_samples is not None and eval_dataset_original_size > data_args.max_val_samples:
+    if eval_dataset is not None and data_args.max_val_samples is not None and eval_dataset_original_size > data_args.max_val_samples:
         eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
 
     train_dataset_final_size = len(train_dataset)
-    eval_dataset_final_size = len(eval_dataset)
+    if eval_dataset is not None:
+        eval_dataset_final_size = len(eval_dataset)
     
     logger.info(f"After filtering {train_dataset_final_size} of {train_dataset_original_size} samples will be used to train the model")
-    logger.info(f"After filtering {eval_dataset_final_size} of {eval_dataset_original_size} samples will be used to eval the model")
+    if eval_dataset is not None:
+        logger.info(f"After filtering {eval_dataset_final_size} of {eval_dataset_original_size} samples will be used to eval the model")
 
     # Create and save tokenizer
     chars_to_ignore_regex = f"[{re.escape(''.join(data_args.chars_to_ignore))}]"
@@ -611,11 +640,12 @@ def main():
         remove_columns=["sentence"], 
         num_proc=data_args.preprocessing_num_workers
     )
-    eval_dataset = eval_dataset.map(
-        remove_special_characters, 
-        remove_columns=["sentence"], 
-        num_proc=data_args.preprocessing_num_workers
-    )
+    if eval_dataset is not None:
+        eval_dataset = eval_dataset.map(
+            remove_special_characters, 
+            remove_columns=["sentence"], 
+            num_proc=data_args.preprocessing_num_workers
+        )
     
     # Load pretrained model and tokenizer
     #
@@ -624,17 +654,27 @@ def main():
     # download model & vocab.
     
     if model_args.model_name_or_path in PRETRAINED_MODELS:
-        dataset = datasets.concatenate_datasets([train_dataset, eval_dataset])
+        dataset = datasets.concatenate_datasets([train_dataset, eval_dataset]) if eval_dataset is not None else train_dataset
         if len(dataset) > additional_training_args.max_dataset_size_vocab_builder:
             dataset = dataset.select(range(additional_training_args.max_dataset_size_vocab_builder))
-        tokenizer = build_tokenizer(training_args.output_dir, dataset, data_args.preprocessing_num_workers, additional_training_args.min_char_occurrence)
+        tokenizer = build_tokenizer(training_args.output_dir, dataset, data_args.preprocessing_num_workers, additional_training_args.min_char_occurrence_ratio)
         feature_extractor = Wav2Vec2FeatureExtractor(
             feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
         )
         processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
     else:
         processor = Wav2Vec2Processor.from_pretrained(model_args.model_name_or_path)
-    
+
+    if additional_training_args.remove_samples_with_oov_from_training:
+        vocab = set(processor.tokenizer.encoder.keys())
+        train_dataset_size = len(train_dataset)
+        train_dataset = train_dataset.filter(
+            lambda example: vocab.issuperset(example["text"].replace(" ", "")),
+            num_proc=data_args.preprocessing_num_workers
+        )
+        print(f"OOV found in {train_dataset_size - len(train_dataset)} samples, and they were removed from training set")
+        print(f"The final training set size is {len(train_dataset)}")
+
     # save the feature_extractor and the tokenizer
     processor.save_pretrained(training_args.output_dir)
     
@@ -668,11 +708,12 @@ def main():
         remove_columns=train_dataset.column_names,
         num_proc=data_args.preprocessing_num_workers
     )
-    eval_dataset = eval_dataset.map(
-        speech_file_to_array_fn,
-        remove_columns=eval_dataset.column_names,
-        num_proc=data_args.preprocessing_num_workers
-    )
+    if eval_dataset is not None:
+        eval_dataset = eval_dataset.map(
+            speech_file_to_array_fn,
+            remove_columns=eval_dataset.column_names,
+            num_proc=data_args.preprocessing_num_workers
+        )
 
     def prepare_dataset(batch):
         # check that all files have the correct sampling rate
@@ -693,13 +734,14 @@ def main():
         batched=True,
         num_proc=data_args.preprocessing_num_workers
     )
-    eval_dataset = eval_dataset.map(
-        prepare_dataset,
-        remove_columns=eval_dataset.column_names,
-        batch_size=training_args.per_device_train_batch_size,
-        batched=True,
-        num_proc=data_args.preprocessing_num_workers
-    )
+    if eval_dataset is not None:
+        eval_dataset = eval_dataset.map(
+            prepare_dataset,
+            remove_columns=eval_dataset.column_names,
+            batch_size=training_args.per_device_train_batch_size,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers
+        )
 
     # Pre-compute sample lengths
     def input_lengths(example):
@@ -739,7 +781,8 @@ def main():
         padding=True,
         apply_gaussian_noise_with_p=additional_training_args.apply_gaussian_noise_with_p, 
         apply_gain_with_p=additional_training_args.apply_gain_with_p, 
-        apply_pitch_shift_p=additional_training_args.apply_pitch_shift_p, 
+        apply_pitch_shift_with_p=additional_training_args.apply_pitch_shift_with_p,
+        apply_time_stretch_with_p=additional_training_args.apply_time_stretch_with_p, 
         sample_rate=16_000,
     )
 
@@ -755,8 +798,8 @@ def main():
         data_collator=data_collator,
         args=training_args,
         compute_metrics=compute_metrics,
-        train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=eval_dataset if training_args.do_eval else None,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         tokenizer=processor.feature_extractor,
     )
 
@@ -783,7 +826,7 @@ def main():
 
     # Evaluation
     metrics = {}
-    if training_args.do_eval:
+    if eval_dataset is not None and training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate()
         max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)

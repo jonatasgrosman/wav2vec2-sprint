@@ -6,7 +6,7 @@ from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
 LANG_ID = "pt"
 MODEL_ID = "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese"
-SAMPLES = 5
+SAMPLES = 10
 
 test_dataset = load_dataset("common_voice", LANG_ID, split=f"test[:{SAMPLES}]")
 
