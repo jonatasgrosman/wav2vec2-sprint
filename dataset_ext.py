@@ -21,6 +21,8 @@ import re
 import homoglyphs as hg
 import gdown
 import json
+import pandas as pd
+import glob
 
 import datasets
 
@@ -595,39 +597,54 @@ _LANGUAGES = {
 }
 
 _CSS10_URLS = {
-    "de": "https://drive.google.com/uc?id=1wgCHGvT0S8YrNfRTVyn23sW-5MFknoHA",
-    "el": "https://drive.google.com/uc?id=10BNORyOqkosxEf3qAAtWM1qWjHEZzXTO",
-    "es": "https://drive.google.com/uc?id=1dyUvSxv0KowTseI35dE8UXpVsYFhEpQV",
-    "fi": "https://drive.google.com/uc?id=1H4-eGIgf4aK_s14uo-srbKMENpysuV2u",
-    "fr": "https://drive.google.com/uc?id=1kuhoDjhA_Cij0SJuMI_4kneDTR_cqahS",
-    "hu": "https://drive.google.com/uc?id=1ms2INJ1e0ChU0TMzgDYLa8jtoTK2gkmE",
-    "ja": "https://drive.google.com/uc?id=1E4k8FduAk-_wy85AQrGakZBcw2hLhmU6",
-    "nl": "https://drive.google.com/uc?id=1ji8QD4lJzInz2vomGkMafRjpz3gGBYsf",
-    "ru": "https://drive.google.com/uc?id=1tx3dpO8SX8CriF0YsK8XeISZc9yGRody",
-    "zh-CN": "https://drive.google.com/uc?id=1hliY4KD_I8y4FQg5zta9IDGN0HRQLRiv",
+    "de": "https://drive.google.com/uc?id=1wgCHGvT0S8YrNfRTVyn23sW-5MFknoHA", # 7427 samples
+    "el": "https://drive.google.com/uc?id=10BNORyOqkosxEf3qAAtWM1qWjHEZzXTO", # 1844 samples
+    "es": "https://drive.google.com/uc?id=1dyUvSxv0KowTseI35dE8UXpVsYFhEpQV", # 11100 samples
+    "fi": "https://drive.google.com/uc?id=1H4-eGIgf4aK_s14uo-srbKMENpysuV2u", # 4842 samples
+    "fr": "https://drive.google.com/uc?id=1kuhoDjhA_Cij0SJuMI_4kneDTR_cqahS", # 8648 samples
+    "hu": "https://drive.google.com/uc?id=1ms2INJ1e0ChU0TMzgDYLa8jtoTK2gkmE", # 4515 samples
+    "ja": "https://drive.google.com/uc?id=1E4k8FduAk-_wy85AQrGakZBcw2hLhmU6", # 6841 samples
+    "nl": "https://drive.google.com/uc?id=1ji8QD4lJzInz2vomGkMafRjpz3gGBYsf", # 6494 samples
+    "ru": "https://drive.google.com/uc?id=1tx3dpO8SX8CriF0YsK8XeISZc9yGRody", # 9599 samples
+    "zh-CN": "https://drive.google.com/uc?id=1hliY4KD_I8y4FQg5zta9IDGN0HRQLRiv", # 2971 samples
 }
 
 _JSUT_URLS = {
-    "ja": "http://ss-takashi.sakura.ne.jp/corpus/jsut_ver1.1.zip"
+    "ja": "http://ss-takashi.sakura.ne.jp/corpus/jsut_ver1.1.zip" # 7696 samples
 }
 
 _NST_URLS = {
     "sv-SE": {
         "metadata": "https://www.nb.no/sbfil/talegjenkjenning/16kHz_2020/se_2020/ADB_SWE_0467.tar.gz",
-        "files": "https://www.nb.no/sbfil/talegjenkjenning/16kHz_2020/se_2020/lydfiler_16_1.tar.gz",
+        "files": "https://www.nb.no/sbfil/talegjenkjenning/16kHz_2020/se_2020/lydfiler_16_1.tar.gz", # ? samples
     }
 }
 
 _FREE_ST_URLS = {
-    "zh-CN": "https://www.openslr.org/resources/38/ST-CMDS-20170001_1-OS.tar.gz",
+    "zh-CN": "https://www.openslr.org/resources/38/ST-CMDS-20170001_1-OS.tar.gz", # 102600 samples
 }
 
 _ARABIC_SPEECH = {
-    "ar": "http://en.arabicspeechcorpus.com/arabic-speech-corpus.zip"
+    "ar": "http://en.arabicspeechcorpus.com/arabic-speech-corpus.zip" # 1913 samples
 }
 
-_MAX_TRAIN_SAMPLES = 80000
-_MAX_VAL_SAMPLES = 20000
+_TIMIT = {
+    "en": "https://data.deepai.org/timit.zip" # 4620 samples
+}
+
+_LIBRISPEECH_DL_URL = "http://www.openslr.org/resources/12/"
+_LIBRISPEECH = {
+    "en": [
+        _LIBRISPEECH_DL_URL + "dev-clean.tar.gz", # 2703 samples
+        _LIBRISPEECH_DL_URL + "dev-other.tar.gz", # 2864 samples
+        _LIBRISPEECH_DL_URL + "train-clean-100.tar.gz", # 28539 samples
+        _LIBRISPEECH_DL_URL + "train-clean-360.tar.gz", # 104014 samples
+        _LIBRISPEECH_DL_URL + "train-other-500.tar.gz", # 148688 samples
+    ]
+}
+
+_MAX_TRAIN_SAMPLES = 90000
+_MAX_VAL_SAMPLES = 10000
 
 class CommonVoiceConfig(datasets.BuilderConfig):
     """BuilderConfig for CommonVoice."""
@@ -743,6 +760,17 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
             arabic_speech_dir = dl_manager.download_and_extract(_ARABIC_SPEECH[self.config.name])
             arabic_speech_dir = os.path.join(arabic_speech_dir, "arabic-speech-corpus")
 
+        timit_dir = None
+        if self.config.name in _TIMIT:
+            timit_dir = dl_manager.download_and_extract(_TIMIT[self.config.name])
+
+        librispeech_dirs = None
+        if self.config.name in _LIBRISPEECH:
+            librispeech_dirs = []
+            for librispeech_url in _LIBRISPEECH[self.config.name]:
+                librispeech_dir = dl_manager.download_and_extract(librispeech_url)
+                librispeech_dirs.append(librispeech_dir)
+
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
@@ -755,6 +783,8 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                     "nst_files_dir": nst_files_dir,
                     "free_st_dir": free_st_dir,
                     "arabic_speech_dir": arabic_speech_dir,
+                    "timit_dir": timit_dir,
+                    "librispeech_dirs": librispeech_dirs,
                     "max_samples": _MAX_TRAIN_SAMPLES
                 },
             ),
@@ -769,6 +799,8 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                     "nst_files_dir": None,
                     "free_st_dir": None,
                     "arabic_speech_dir": None,
+                    "timit_dir": None,
+                    "librispeech_dirs": None,
                     "max_samples": _MAX_VAL_SAMPLES
                 },
             )
@@ -1021,8 +1053,87 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
                     "dataset": "arabic_speech"
                 }
 
+    def _timit_examples_generator(self, timit_dir):
+
+        data_info_csv = os.path.join(timit_dir, "train_data.csv")
+
+        """Generate examples from TIMIT archive_path based on the test/train csv information."""
+        # Extract the archive path
+        data_path = os.path.join(os.path.dirname(data_info_csv).strip(), "data")
+
+        # Read the data info to extract rows mentioning about non-converted audio only
+        data_info = pd.read_csv(data_info_csv, encoding="utf8")
+        # making sure that the columns having no information about the file paths are removed
+        data_info.dropna(subset=["path_from_data_dir"], inplace=True)
+
+        # filter out only the required information for data preparation
+        data_info = data_info.loc[(data_info["is_audio"]) & (~data_info["is_converted_audio"])]
+
+        # Iterating the contents of the data to extract the relevant information
+        for audio_idx in range(data_info.shape[0]):
+            audio_data = data_info.iloc[audio_idx]
+
+            # extract the path to audio
+            wav_path = os.path.join(data_path, *(audio_data["path_from_data_dir"].split("/")))
+
+            # extract transcript
+            with open(wav_path.replace(".WAV", ".TXT"), "r", encoding="utf-8") as op:
+                transcript = " ".join(op.readlines()[0].split()[2:])  # first two items are sample number
+
+            new_audio_path = self._convert_to_flac_and_save_it(wav_path)
+            speech_array, sampling_rate = sf.read(new_audio_path)
+            duration = len(speech_array) / sampling_rate
+
+            yield {
+                "client_id": str(audio_data["speaker_id"]),
+                "path": new_audio_path,
+                "sentence": transcript,
+                "up_votes": 0,
+                "down_votes": 0,
+                "age": None,
+                "gender": None,
+                "accent": audio_data["dialect_region"],
+                "locale": None,
+                "segment": None,
+                "duration": duration,
+                "dataset": "timit"
+            }
+
+    def _librispeech_examples_generator(self, librispeech_dir):
+
+        transcripts_glob = os.path.join(librispeech_dir, "LibriSpeech", "*/*/*/*.txt")
+        for transcript_file in sorted(glob.glob(transcripts_glob)):
+            path = os.path.dirname(transcript_file)
+            # with open(os.path.join(path, transcript_file), "r", encoding="utf-8") as f:
+            with open(transcript_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    key, transcript = line.split(" ", 1)
+                    audio_file = f"{key}.flac"
+                    audio_file = os.path.join(path, audio_file)
+                    speaker_id, chapter_id = [int(el) for el in key.split("-")[:2]]
+
+                    speech_array, sampling_rate = sf.read(audio_file)
+                    duration = len(speech_array) / sampling_rate
+
+                    yield {
+                        "client_id": str(speaker_id),
+                        "path": audio_file,
+                        "sentence": transcript,
+                        "up_votes": 0,
+                        "down_votes": 0,
+                        "age": None,
+                        "gender": None,
+                        "accent": None,
+                        "locale": None,
+                        "segment": None,
+                        "duration": duration,
+                        "dataset": "librispeech"
+                    }
+
     def _generate_examples(self, filepath, path_to_clips, css10_dir, jsut_dir, nst_metadata_dir, 
-                           nst_files_dir, free_st_dir, arabic_speech_dir, max_samples):
+                           nst_files_dir, free_st_dir, arabic_speech_dir, timit_dir, 
+                           librispeech_dirs, max_samples):
         """ Yields examples. """
         _id = 0
 
@@ -1032,39 +1143,61 @@ class CommonVoice(datasets.GeneratorBasedBuilder):
             yield _id, example
             _id += 1
 
-        if css10_dir is not None:
+        if timit_dir is not None and _id < max_samples:
+            for example in self._timit_examples_generator(timit_dir):
+                if _id < max_samples:
+                    yield _id, example
+                    _id += 1
+                else:
+                    break
+
+        if css10_dir is not None and _id < max_samples:
             for example in self._css10_examples_generator(css10_dir):
-                if _id == max_samples:
+                if _id < max_samples:
+                    yield _id, example
+                    _id += 1
+                else:
                     break
-                yield _id, example
-                _id += 1
 
-        if jsut_dir is not None:
+        if librispeech_dirs is not None and _id < max_samples:
+            for librispeech_dir in librispeech_dirs:
+                for example in self._librispeech_examples_generator(librispeech_dir):
+                    if _id < max_samples:
+                        yield _id, example
+                        _id += 1
+                    else:
+                        break
+
+        if jsut_dir is not None and _id < max_samples:
             for example in self._jsut_examples_generator(jsut_dir):
-                if _id == max_samples:
+                if _id < max_samples:
+                    yield _id, example
+                    _id += 1
+                else:
                     break
-                yield _id, example
-                _id += 1
 
-        if nst_files_dir is not None:
+        if nst_files_dir is not None and _id < max_samples:
             for example in self._nst_examples_generator(nst_metadata_dir, nst_files_dir):
-                if _id == max_samples:
+                if _id < max_samples:
+                    yield _id, example
+                    _id += 1
+                else:
                     break
-                yield _id, example
-                _id += 1
 
-        if free_st_dir is not None:
+        if free_st_dir is not None and _id < max_samples:
             for example in self._free_st_examples_generator(free_st_dir):
-                if _id == max_samples:
+                if _id < max_samples:
+                    yield _id, example
+                    _id += 1
+                else:
                     break
-                yield _id, example
-                _id += 1
         
-        if arabic_speech_dir is not None:
+        if arabic_speech_dir is not None and _id < max_samples:
             root_dirs = [arabic_speech_dir, os.path.join(arabic_speech_dir, "test set")]
             for root_dir in root_dirs:
                 for example in self._arabic_speech_examples_generator(root_dir):
-                    if _id == max_samples:
+                    if _id < max_samples:
+                        yield _id, example
+                        _id += 1
+                    else:
                         break
-                    yield _id, example
-                    _id += 1

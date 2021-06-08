@@ -128,6 +128,10 @@ class AdditionalTrainingArguments:
         default=False,
         metadata={"help": "Whether to remove samples from training when there are OOV characters on them"},
     )
+    use_only_top_k_most_common_accent: Optional[int] = field(
+        default=None,
+        metadata={"help": "Use only the top most common accent in dataset for training"},
+    )
 
 @dataclass
 class ModelArguments:
@@ -582,6 +586,9 @@ def main():
         split="train+validation", 
         cache_dir=model_args.cache_dir
     )
+    
+    print("DATASET COUNT:")
+    print(collections.Counter(dataset["dataset"]))
 
     if data_args.val_ratio > 0 and data_args.max_val_samples > 0 and training_args.do_eval:
         if len(dataset) * data_args.val_ratio > data_args.max_val_samples:
@@ -632,7 +639,7 @@ def main():
     chars_to_ignore_regex = f"[{re.escape(''.join(data_args.chars_to_ignore))}]"
 
     def remove_special_characters(batch):
-        batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).upper() + " "
+        batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).strip().upper() + " "
         return batch
 
     train_dataset = train_dataset.map(
@@ -675,6 +682,23 @@ def main():
         print(f"OOV found in {train_dataset_size - len(train_dataset)} samples, and they were removed from training set")
         print(f"The final training set size is {len(train_dataset)}")
 
+    if additional_training_args.use_only_top_k_most_common_accent is not None:
+
+        train_dataset_size = len(train_dataset)
+
+        accent_count = collections.Counter(train_dataset["accent"])
+        # accent_count.pop("", None)
+        major_accents = [k for k, x in accent_count.most_common(additional_training_args.use_only_top_k_most_common_accent)]
+
+        print(f"ACCENT COUNT: {accent_count}")
+
+        train_dataset = train_dataset.filter(
+            lambda example: example["accent"] in major_accents,
+            num_proc=data_args.preprocessing_num_workers
+        )
+
+        print(f"{train_dataset_size - len(train_dataset)} were removed from dataset due accent filtering, the final training dataset size is {len(train_dataset)}")
+
     # save the feature_extractor and the tokenizer
     processor.save_pretrained(training_args.output_dir)
     
@@ -702,6 +726,11 @@ def main():
         batch["sampling_rate"] = sampling_rate
         batch["target_text"] = batch["text"]
         return batch
+    
+    print("TRAIN DATASET COUNT:")
+    print(collections.Counter(train_dataset["dataset"]))
+    print("EVAL DATASET COUNT:")
+    print(collections.Counter(eval_dataset["dataset"]))
 
     train_dataset = train_dataset.map(
         speech_file_to_array_fn,
