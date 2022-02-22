@@ -1,3 +1,5 @@
+This repo is deprecated in favor of https://github.com/jonatasgrosman/huggingsound
+
 # Wav2Vec Trainer
 
 This repository is based on https://github.com/jqueguiner/wav2vec2-sprint
